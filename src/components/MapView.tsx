@@ -104,28 +104,68 @@ function buildLabelPoints(paddocks: Paddock[]): GeoJSON.FeatureCollection {
   return { type: 'FeatureCollection', features };
 }
 
+// Detect best split axis based on paddock shape.
+// 'ew' = wider than tall → cut west→east (vertical strips)
+// 'ns' = taller than wide → cut north→south (horizontal strips)
+function detectSplitAxis(bbox: [number, number, number, number]): 'ew' | 'ns' {
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  const midLat = (minLat + maxLat) / 2;
+  const cosLat = Math.cos((midLat * Math.PI) / 180);
+  const widthM = (maxLng - minLng) * 111320 * cosLat;
+  const heightM = (maxLat - minLat) * 110574;
+  return widthM >= heightM ? 'ew' : 'ns';
+}
+
 function splitPolygonIntoStrips(boundary: GeoJSON.Polygon, count: number): GeoJSON.Polygon[] {
   const feat = feature(boundary);
-  const [minLng, minLat, maxLng, maxLat] = turfBbox(feat);
-  const lngStep = (maxLng - minLng) / count;
+  const bbox = turfBbox(feat) as [number, number, number, number];
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  const axis = detectSplitAxis(bbox);
   const results: GeoJSON.Polygon[] = [];
-  for (let i = 0; i < count; i++) {
-    const bufL = i === 0 ? minLng + i * lngStep - 0.00001 : minLng + i * lngStep;
-    const bufR = i === count - 1 ? minLng + (i + 1) * lngStep + 0.00001 : minLng + (i + 1) * lngStep;
-    const stripBox = turfPolygon([[
-      [bufL, minLat - 0.00001], [bufR, minLat - 0.00001],
-      [bufR, maxLat + 0.00001], [bufL, maxLat + 0.00001],
-      [bufL, minLat - 0.00001],
-    ]]);
-    const intersection = turfIntersect(featureCollection([feat, stripBox]));
-    if (intersection && intersection.geometry.type === 'Polygon') {
-      results.push(intersection.geometry as GeoJSON.Polygon);
-    } else if (intersection && intersection.geometry.type === 'MultiPolygon') {
-      const polys = (intersection.geometry as GeoJSON.MultiPolygon).coordinates;
-      const largest = polys.reduce((a, b) =>
-        turfArea(turfPolygon(a)) > turfArea(turfPolygon(b)) ? a : b
-      );
-      results.push({ type: 'Polygon', coordinates: largest });
+
+  if (axis === 'ew') {
+    // Wide paddock: cut into vertical strips west→east
+    const lngStep = (maxLng - minLng) / count;
+    for (let i = 0; i < count; i++) {
+      const bufL = i === 0 ? minLng + i * lngStep - 0.00001 : minLng + i * lngStep;
+      const bufR = i === count - 1 ? minLng + (i + 1) * lngStep + 0.00001 : minLng + (i + 1) * lngStep;
+      const stripBox = turfPolygon([[
+        [bufL, minLat - 0.00001], [bufR, minLat - 0.00001],
+        [bufR, maxLat + 0.00001], [bufL, maxLat + 0.00001],
+        [bufL, minLat - 0.00001],
+      ]]);
+      const intersection = turfIntersect(featureCollection([feat, stripBox]));
+      if (intersection && intersection.geometry.type === 'Polygon') {
+        results.push(intersection.geometry as GeoJSON.Polygon);
+      } else if (intersection && intersection.geometry.type === 'MultiPolygon') {
+        const polys = (intersection.geometry as GeoJSON.MultiPolygon).coordinates;
+        const largest = polys.reduce((a, b) =>
+          turfArea(turfPolygon(a)) > turfArea(turfPolygon(b)) ? a : b
+        );
+        results.push({ type: 'Polygon', coordinates: largest });
+      }
+    }
+  } else {
+    // Tall paddock: cut into horizontal strips north→south
+    const latStep = (maxLat - minLat) / count;
+    for (let i = 0; i < count; i++) {
+      const bufB = i === 0 ? minLat + i * latStep - 0.00001 : minLat + i * latStep;
+      const bufT = i === count - 1 ? minLat + (i + 1) * latStep + 0.00001 : minLat + (i + 1) * latStep;
+      const stripBox = turfPolygon([[
+        [minLng - 0.00001, bufB], [maxLng + 0.00001, bufB],
+        [maxLng + 0.00001, bufT], [minLng - 0.00001, bufT],
+        [minLng - 0.00001, bufB],
+      ]]);
+      const intersection = turfIntersect(featureCollection([feat, stripBox]));
+      if (intersection && intersection.geometry.type === 'Polygon') {
+        results.push(intersection.geometry as GeoJSON.Polygon);
+      } else if (intersection && intersection.geometry.type === 'MultiPolygon') {
+        const polys = (intersection.geometry as GeoJSON.MultiPolygon).coordinates;
+        const largest = polys.reduce((a, b) =>
+          turfArea(turfPolygon(a)) > turfArea(turfPolygon(b)) ? a : b
+        );
+        results.push({ type: 'Polygon', coordinates: largest });
+      }
     }
   }
   return results;

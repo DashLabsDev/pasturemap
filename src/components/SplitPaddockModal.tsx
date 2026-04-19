@@ -9,7 +9,24 @@ interface Props {
   onClose: () => void;
 }
 
+function getSplitDirection(paddock: Paddock): 'east–west' | 'north–south' {
+  const geo = paddock.boundary_geojson as GeoJSON.Polygon | null;
+  if (!geo?.coordinates?.[0]) return 'east–west';
+  const coords = geo.coordinates[0];
+  const lngs = coords.map((c) => c[0]);
+  const lats = coords.map((c) => c[1]);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const midLat = (minLat + maxLat) / 2;
+  const widthM = (maxLng - minLng) * 111320 * Math.cos((midLat * Math.PI) / 180);
+  const heightM = (maxLat - minLat) * 110574;
+  // If wider than tall → strips run N-S (split direction = east–west)
+  // If taller than wide → strips run E-W (split direction = north–south)
+  return widthM >= heightM ? 'east–west' : 'north–south';
+}
+
 export default function SplitPaddockModal({ paddock, onConfirm, onClose }: Props) {
+  const splitDirection = getSplitDirection(paddock);
   const [mode, setMode] = useState<'count' | 'acreage'>('count');
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
@@ -117,7 +134,7 @@ export default function SplitPaddockModal({ paddock, onConfirm, onClose }: Props
               Creates <span className="text-white/70 font-medium">{previewCount} strips</span>
               {' '}of <span className="text-white/70 font-medium">~{previewAcres} ac</span> each
             </p>
-            <p className="text-xs text-white/25 mt-0.5">Splits west → east using parallel lines</p>
+            <p className="text-xs text-white/25 mt-0.5">Splits {splitDirection} along longest axis</p>
           </div>
         )}
 
