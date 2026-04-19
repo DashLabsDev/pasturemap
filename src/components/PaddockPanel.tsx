@@ -8,9 +8,10 @@ interface Props {
   herd: Herd | null;
   session: GrazingSession | null;
   onClose: () => void;
+  onSplit?: () => void;
 }
 
-export default function PaddockPanel({ paddock, herd, session, onClose }: Props) {
+export default function PaddockPanel({ paddock, herd, session, onClose, onSplit }: Props) {
   const grazingDays = session ? daysSince(session.move_in_date) : null;
   const isGrazing = session !== null;
   const progress =
@@ -107,7 +108,20 @@ export default function PaddockPanel({ paddock, herd, session, onClose }: Props)
 
         {/* Notes */}
         {paddock.notes && (
-          <p className="text-xs text-white/40 italic leading-relaxed">{paddock.notes}</p>
+          <p className="text-xs text-white/40 italic leading-relaxed mb-4">{paddock.notes}</p>
+        )}
+
+        {/* Split button — only show if paddock has a boundary and no parent (don't re-split sub-paddocks) */}
+        {paddock.boundary_geojson && !paddock.parent_paddock_id && onSplit && (
+          <button
+            onClick={onSplit}
+            className="w-full mt-1 py-2 text-xs font-medium text-white/60 hover:text-white/90 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg transition-colors flex items-center justify-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m-8-8h16" />
+            </svg>
+            Split Paddock
+          </button>
         )}
       </div>
     </div>

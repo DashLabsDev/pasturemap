@@ -6,9 +6,13 @@ import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 import turfArea from '@turf/area';
+import turfBbox from '@turf/bbox';
+import turfIntersect from '@turf/intersect';
+import { featureCollection, feature, polygon as turfPolygon } from '@turf/helpers';
 import { supabase, DEFAULT_RANCH_ID } from '@/lib/supabase';
 import type { Paddock, Herd, GrazingSession } from '@/lib/types';
 import PaddockPanel from './PaddockPanel';
+import SplitPaddockModal from './SplitPaddockModal';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
 
@@ -85,6 +89,49 @@ function buildLabelPoints(paddocks: Paddock[]): GeoJSON.FeatureCollection {
   return { type: 'FeatureCollection', features };
 }
 
+/**
+ * Split a polygon into N equal vertical strips using parallel N-S cutting lines.
+ * Returns array of GeoJSON Polygon geometries.
+ */
+function splitPolygonIntoStrips(
+  boundary: GeoJSON.Polygon,
+  count: number
+): GeoJSON.Polygon[] {
+  const feat = feature(boundary);
+  const [minLng, minLat, maxLng, maxLat] = turfBbox(feat);
+  const lngStep = (maxLng - minLng) / count;
+  const results: GeoJSON.Polygon[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const stripLeft = minLng + i * lngStep;
+    const stripRight = minLng + (i + 1) * lngStep;
+    // Add small buffer to avoid floating point edge gaps
+    const bufL = i === 0 ? stripLeft - 0.00001 : stripLeft;
+    const bufR = i === count - 1 ? stripRight + 0.00001 : stripRight;
+    const stripBox = turfPolygon([[
+      [bufL, minLat - 0.00001],
+      [bufR, minLat - 0.00001],
+      [bufR, maxLat + 0.00001],
+      [bufL, maxLat + 0.00001],
+      [bufL, minLat - 0.00001],
+    ]]);
+    const intersection = turfIntersect(featureCollection([feat, stripBox]));
+    if (intersection && intersection.geometry.type === 'Polygon') {
+      results.push(intersection.geometry as GeoJSON.Polygon);
+    } else if (intersection && intersection.geometry.type === 'MultiPolygon') {
+      // Take the largest piece if multi-polygon result
+      const polys = (intersection.geometry as GeoJSON.MultiPolygon).coordinates;
+      const largest = polys.reduce((a, b) => {
+        const aArea = turfArea(turfPolygon(a));
+        const bArea = turfArea(turfPolygon(b));
+        return aArea > bArea ? a : b;
+      });
+      results.push({ type: 'Polygon', coordinates: largest });
+    }
+  }
+  return results;
+}
+
 export default function MapView() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -98,6 +145,8 @@ export default function MapView() {
   const [newBoundary, setNewBoundary] = useState<GeoJSON.Geometry | null>(null);
   const [newName, setNewName] = useState('');
   const [newAcreage, setNewAcreage] = useState('');
+  const [splitTarget, setSplitTarget] = useState<Paddock | null>(null);
+  const [splitting, setSplitting] = useState(false);
 
   // Address search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -339,6 +388,42 @@ export default function MapView() {
   const herdForPaddock = (paddockId: string) =>
     herds.find((h) => h.current_paddock_id === paddockId);
 
+  // Split paddock handler
+  const handleSplitConfirm = async (mode: 'count' | 'acreage', value: number) => {
+    if (!splitTarget?.boundary_geojson) return;
+    setSplitting(true);
+
+    const boundary = splitTarget.boundary_geojson as GeoJSON.Polygon;
+    const totalAcres = splitTarget.acreage ?? 0;
+
+    const count =
+      mode === 'count'
+        ? Math.round(value)
+        : totalAcres > 0
+        ? Math.max(2, Math.round(totalAcres / value))
+        : 2;
+
+    const strips = splitPolygonIntoStrips(boundary, count);
+
+    // Insert sub-paddocks
+    for (let i = 0; i < strips.length; i++) {
+      const sqMeters = turfArea(feature(strips[i]));
+      const acres = sqMeters / 4046.8564224;
+      await supabase.rpc('upsert_paddock', {
+        p_ranch_id: DEFAULT_RANCH_ID,
+        p_name: `${splitTarget.name} – ${i + 1}`,
+        p_acreage: parseFloat(acres.toFixed(2)),
+        p_boundary_geojson: strips[i],
+        p_parent_paddock_id: splitTarget.id,
+      });
+    }
+
+    setSplitting(false);
+    setSplitTarget(null);
+    setSelectedPaddock(null);
+    fetchData();
+  };
+
   // Address search using Mapbox Geocoding API
   const handleSearchInput = (value: string) => {
     setSearchQuery(value);
@@ -478,7 +563,30 @@ export default function MapView() {
             ) || null
           }
           onClose={() => setSelectedPaddock(null)}
+          onSplit={() => setSplitTarget(selectedPaddock)}
         />
+      )}
+
+      {/* Split modal */}
+      {splitTarget && !splitting && (
+        <SplitPaddockModal
+          paddock={splitTarget}
+          onConfirm={handleSplitConfirm}
+          onClose={() => setSplitTarget(null)}
+        />
+      )}
+
+      {/* Splitting spinner */}
+      {splitting && (
+        <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-white/10 rounded-xl px-6 py-4 flex items-center gap-3 shadow-2xl">
+            <svg className="w-5 h-5 text-emerald-400 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <span className="text-sm text-white/80">Splitting paddock…</span>
+          </div>
+        </div>
       )}
     </div>
   );
