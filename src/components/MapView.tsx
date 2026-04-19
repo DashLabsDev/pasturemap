@@ -5,6 +5,7 @@ import mapboxgl from 'mapbox-gl';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
+import turfArea from '@turf/area';
 import { supabase, DEFAULT_RANCH_ID } from '@/lib/supabase';
 import type { Paddock, Herd, GrazingSession } from '@/lib/types';
 import PaddockPanel from './PaddockPanel';
@@ -97,6 +98,12 @@ export default function MapView() {
   const [newBoundary, setNewBoundary] = useState<GeoJSON.Geometry | null>(null);
   const [newName, setNewName] = useState('');
   const [newAcreage, setNewAcreage] = useState('');
+
+  // Address search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; place_name: string; center: [number, number] }>>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const paddocksRef = useRef<Paddock[]>([]);
   paddocksRef.current = paddocks;
@@ -258,13 +265,19 @@ export default function MapView() {
       map.getCanvas().style.cursor = '';
     });
 
-    // Draw create handler
+    // Draw create handler — auto-calculate acreage
     map.on('draw.create', (e: { features: GeoJSON.Feature[] }) => {
       if (e.features.length > 0) {
-        const geo = e.features[0].geometry;
+        const feat = e.features[0];
+        const geo = feat.geometry;
         setNewBoundary(geo);
+        // Calculate acreage from drawn polygon
+        if (geo.type === 'Polygon') {
+          const sqMeters = turfArea({ type: 'Feature', geometry: geo, properties: {} });
+          const acres = sqMeters / 4046.8564224;
+          setNewAcreage(acres.toFixed(2));
+        }
         setShowNewForm(true);
-        // Remove drawn feature from draw (we handle it ourselves)
         if (drawRef.current) {
           drawRef.current.deleteAll();
         }
@@ -326,41 +339,127 @@ export default function MapView() {
   const herdForPaddock = (paddockId: string) =>
     herds.find((h) => h.current_paddock_id === paddockId);
 
+  // Address search using Mapbox Geocoding API
+  const handleSearchInput = (value: string) => {
+    setSearchQuery(value);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (!value.trim()) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+    searchTimeoutRef.current = setTimeout(async () => {
+      const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+      const res = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(value)}.json?access_token=${token}&country=US&types=address,place,region,postcode,locality&proximity=-92.3938,36.9228&limit=5`
+      );
+      const data = await res.json();
+      const features = data.features ?? [];
+      setSearchResults(features.map((f: { id: string; place_name: string; center: [number, number] }) => ({
+        id: f.id,
+        place_name: f.place_name,
+        center: f.center,
+      })));
+      setShowSearchResults(true);
+    }, 350);
+  };
+
+  const flyToResult = (result: { center: [number, number]; place_name: string }) => {
+    mapRef.current?.flyTo({ center: result.center, zoom: 15, duration: 1200 });
+    setSearchQuery(result.place_name);
+    setSearchResults([]);
+    setShowSearchResults(false);
+  };
+
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* New paddock form */}
-      {showNewForm && (
-        <div className="absolute top-4 left-16 md:left-4 z-[1000] bg-white rounded-lg shadow-xl p-4 w-72">
-          <h3 className="font-bold text-green-900 mb-3">New Paddock</h3>
+      {/* Address search bar */}
+      <div className="absolute top-4 left-4 z-[1000] w-72">
+        <div className="relative">
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none"
+            fill="none" stroke="currentColor" strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+          </svg>
           <input
             type="text"
-            placeholder="Paddock name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className="w-full border rounded px-3 py-2 mb-2 text-sm"
+            placeholder="Search address or place..."
+            value={searchQuery}
+            onChange={(e) => handleSearchInput(e.target.value)}
+            onFocus={() => searchResults.length > 0 && setShowSearchResults(true)}
+            className="w-full pl-9 pr-3 py-2.5 text-sm bg-black/60 backdrop-blur-md text-white placeholder-white/40 border border-white/10 rounded-lg shadow-2xl focus:outline-none focus:border-white/25 focus:bg-black/70 transition-all duration-150"
           />
-          <input
-            type="number"
-            placeholder="Acreage"
-            value={newAcreage}
-            onChange={(e) => setNewAcreage(e.target.value)}
-            className="w-full border rounded px-3 py-2 mb-3 text-sm"
-          />
+        </div>
+        {showSearchResults && searchResults.length > 0 && (
+          <ul className="mt-1 bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-2xl overflow-hidden">
+            {searchResults.map((r) => (
+              <li
+                key={r.id}
+                onClick={() => flyToResult(r)}
+                className="px-3 py-2.5 text-sm text-white/80 hover:text-white hover:bg-white/[0.08] cursor-pointer border-b border-white/5 last:border-0 truncate transition-colors duration-100"
+              >
+                {r.place_name}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* New paddock form */}
+      {showNewForm && (
+        <div className="absolute top-4 left-16 md:left-4 z-[1000] w-72 bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-white/90 tracking-wide uppercase">New Paddock</h3>
+            <button
+              onClick={() => { setShowNewForm(false); setNewBoundary(null); }}
+              className="text-white/30 hover:text-white/60 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+          <div className="mb-3">
+            <label className="block text-xs text-white/40 mb-1 font-medium">Name</label>
+            <input
+              type="text"
+              placeholder="e.g. North Pasture"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-white/[0.08] border border-white/10 text-white placeholder-white/25 rounded-lg focus:outline-none focus:border-white/25 focus:bg-white/10 transition-all duration-150"
+            />
+          </div>
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-white/40 font-medium">Acreage</label>
+              {newAcreage && (
+                <span className="text-xs text-amber-400/80 font-medium">auto-calculated</span>
+              )}
+            </div>
+            <input
+              type="number"
+              placeholder="0.0"
+              value={newAcreage}
+              onChange={(e) => setNewAcreage(e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-white/[0.08] border border-white/10 text-white placeholder-white/25 rounded-lg focus:outline-none focus:border-white/25 focus:bg-white/10 transition-all duration-150"
+            />
+          </div>
           <div className="flex gap-2">
             <button
               onClick={saveNewPaddock}
-              className="flex-1 bg-green-700 text-white rounded px-3 py-2 text-sm font-medium hover:bg-green-600"
+              className="flex-1 px-3 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg transition-colors duration-150"
             >
-              Save
+              Save Paddock
             </button>
             <button
-              onClick={() => {
-                setShowNewForm(false);
-                setNewBoundary(null);
-              }}
-              className="flex-1 bg-gray-200 text-gray-700 rounded px-3 py-2 text-sm font-medium hover:bg-gray-300"
+              onClick={() => { setShowNewForm(false); setNewBoundary(null); }}
+              className="px-3 py-2 text-sm font-medium bg-white/[0.08] hover:bg-white/[0.12] text-white/60 hover:text-white/80 border border-white/10 rounded-lg transition-all duration-150"
             >
               Cancel
             </button>
