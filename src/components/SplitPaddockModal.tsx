@@ -22,8 +22,8 @@ export default function SplitPaddockModal({ paddock, onConfirm, onClose }: Props
       setError('Enter a valid number');
       return;
     }
-    if (mode === 'count' && (num < 2 || num > 20 || !Number.isInteger(num))) {
-      setError('Count must be a whole number between 2 and 20');
+    if (mode === 'count' && (num < 2 || num > 50 || !Number.isInteger(num))) {
+      setError('Count must be a whole number between 2 and 50');
       return;
     }
     if (mode === 'acreage' && totalAcres > 0 && num >= totalAcres) {
