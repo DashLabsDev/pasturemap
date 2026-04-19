@@ -324,11 +324,11 @@ export default function MapView() {
     const count = mode === 'count' ? Math.round(value) : Math.max(2, Math.round(totalAcres / value));
     const strips = splitPolygonIntoStrips(boundary, count);
     for (let i = 0; i < strips.length; i++) {
-      const acres = turfArea(feature(strips[i])) / 4046.8564224;
+      // Let PostGIS compute acreage server-side using EPSG:5070 equal-area projection
       await supabase.rpc('upsert_paddock', {
         p_ranch_id: DEFAULT_RANCH_ID,
         p_name: `${splitTarget.name} – ${i + 1}`,
-        p_acreage: parseFloat(acres.toFixed(2)),
+        p_acreage: null,
         p_boundary_geojson: strips[i],
         p_parent_paddock_id: splitTarget.id,
       });
