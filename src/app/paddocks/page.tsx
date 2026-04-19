@@ -122,7 +122,7 @@ export default function PaddocksPage() {
   const allSelected = paddocks.length > 0 && selected.size === paddocks.length;
   const someSelected = selected.size > 0 && selected.size < paddocks.length;
 
-  const inputCls = 'w-full px-3 py-2 text-sm bg-white/[0.06] border border-white/[0.08] text-white placeholder-white/20 rounded-lg focus:outline-none focus:border-amber-500/50 focus:bg-white/[0.08] transition-all duration-150';
+  const inputCls = 'w-full px-3 py-2 text-sm bg-white/[0.06] border border-white/[0.08] text-white placeholder-white/20 rounded-lg focus:outline-none focus:border-white/25 focus:bg-white/[0.08] transition-all duration-150';
   const labelCls = 'block text-xs text-white/35 font-medium mb-1.5 uppercase tracking-wide';
 
   return (

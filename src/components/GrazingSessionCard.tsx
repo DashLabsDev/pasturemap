@@ -9,10 +9,10 @@ interface Props {
   onSuspend?: () => void;
 }
 
-const statusStyles: Record<string, string> = {
-  active: 'bg-green-100 text-green-800',
-  completed: 'bg-blue-100 text-blue-800',
-  suspended: 'bg-yellow-100 text-yellow-800',
+const statusBadge: Record<string, string> = {
+  active: 'bg-green-500/20 text-green-400 border border-green-500/20',
+  completed: 'bg-white/[0.08] text-white/50 border border-white/10',
+  suspended: 'bg-white/[0.08] text-white/50 border border-white/10',
 };
 
 export default function GrazingSessionCard({ session, onMove, onSuspend }: Props) {
@@ -26,54 +26,58 @@ export default function GrazingSessionCard({ session, onMove, onSuspend }: Props
   const overdue = planned && actualDays > planned;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <span className="font-bold text-green-900">
+    <div className="bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl p-4">
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-semibold text-white/90 truncate">
             {(session.herd as unknown as { name: string } | undefined)?.name ?? 'Herd'}
           </span>
-          <span className="text-gray-400 mx-2">&rarr;</span>
-          <span className="font-medium text-gray-700">
+          <span className="text-white/25 shrink-0">→</span>
+          <span className="text-sm font-medium text-white/60 truncate">
             {(session.paddock as unknown as { name: string } | undefined)?.name ?? 'Paddock'}
           </span>
         </div>
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusStyles[session.status ?? 'active']}`}>
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize shrink-0 ml-2 ${statusBadge[session.status ?? 'active']}`}>
           {session.status}
         </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-sm mb-3">
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
         <div>
-          <span className="text-gray-500">Move In</span>
-          <p className="font-medium">{session.move_in_date}</p>
+          <p className="text-xs text-white/40 font-medium">Move In</p>
+          <p className="text-sm font-semibold text-white/80 mt-0.5">{session.move_in_date}</p>
         </div>
         <div>
-          <span className="text-gray-500">Planned</span>
-          <p className="font-medium">{planned ?? '—'} days</p>
+          <p className="text-xs text-white/40 font-medium">Planned</p>
+          <p className="text-sm font-semibold text-white/80 mt-0.5">{planned ?? '—'} days</p>
         </div>
         <div>
-          <span className="text-gray-500">Actual</span>
-          <p className={`font-medium ${overdue ? 'text-red-600' : ''}`}>
+          <p className="text-xs text-white/40 font-medium">Actual</p>
+          <p className={`text-sm font-semibold mt-0.5 ${overdue ? 'text-red-400' : 'text-white/80'}`}>
             {actualDays} days
           </p>
         </div>
       </div>
 
+      {/* Progress bar */}
       {planned && (
-        <div className="bg-gray-100 rounded-full h-2 mb-3">
+        <div className="bg-white/[0.08] rounded-full h-1.5 mb-3">
           <div
-            className={`rounded-full h-2 transition-all ${overdue ? 'bg-red-500' : 'bg-green-500'}`}
+            className={`rounded-full h-1.5 transition-all duration-300 ${overdue ? 'bg-red-500' : 'bg-green-500'}`}
             style={{ width: `${pct}%` }}
           />
         </div>
       )}
 
+      {/* Actions */}
       {isActive && (onMove || onSuspend) && (
-        <div className="flex gap-2">
+        <div className="flex gap-2 pt-1">
           {onMove && (
             <button
               onClick={onMove}
-              className="flex-1 bg-green-700 text-white rounded px-3 py-1.5 text-sm font-medium hover:bg-green-600"
+              className="flex-1 py-2 text-xs font-medium bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg transition-colors duration-150"
             >
               Move Herd
             </button>
@@ -81,7 +85,7 @@ export default function GrazingSessionCard({ session, onMove, onSuspend }: Props
           {onSuspend && (
             <button
               onClick={onSuspend}
-              className="flex-1 bg-yellow-500 text-white rounded px-3 py-1.5 text-sm font-medium hover:bg-yellow-400"
+              className="flex-1 py-2 text-xs font-medium bg-white/[0.08] hover:bg-white/[0.12] text-white/60 hover:text-white/80 border border-white/10 rounded-lg transition-all duration-150"
             >
               Suspend
             </button>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { calculateRotation } from '@/lib/grazing-calc';
 import type { Herd, Paddock, GrazingSession } from '@/lib/types';
@@ -12,6 +13,9 @@ interface Props {
   onClose: () => void;
   onComplete: () => void;
 }
+
+const inputCls = 'w-full px-3 py-2 text-sm bg-white/[0.08] border border-white/10 text-white placeholder-white/25 rounded-lg focus:outline-none focus:border-white/25 focus:bg-white/[0.10] transition-all duration-150';
+const labelCls = 'block text-xs text-white/40 font-medium mb-1';
 
 export default function MoveHerdDialog({ session, herd, paddocks, onClose, onComplete }: Props) {
   const [targetPaddockId, setTargetPaddockId] = useState('');
@@ -33,7 +37,6 @@ export default function MoveHerdDialog({ session, herd, paddocks, onClose, onCom
 
     const today = new Date().toISOString().slice(0, 10);
 
-    // End current session
     await supabase
       .from('grazing_sessions')
       .update({
@@ -45,7 +48,6 @@ export default function MoveHerdDialog({ session, herd, paddocks, onClose, onCom
       })
       .eq('id', session.id);
 
-    // Start new session
     await supabase.from('grazing_sessions').insert({
       herd_id: herd.id,
       paddock_id: targetPaddockId,
@@ -54,13 +56,11 @@ export default function MoveHerdDialog({ session, herd, paddocks, onClose, onCom
       status: 'active',
     });
 
-    // Update herd current paddock
     await supabase
       .from('herds')
       .update({ current_paddock_id: targetPaddockId })
       .eq('id', herd.id);
 
-    // Log move event
     await supabase.from('move_events').insert({
       herd_id: herd.id,
       from_paddock_id: session.paddock_id,
@@ -74,73 +74,85 @@ export default function MoveHerdDialog({ session, herd, paddocks, onClose, onCom
     onComplete();
   };
 
-  const availablePaddocks = paddocks.filter(
-    (p) => p.id !== session.paddock_id
-  );
+  const availablePaddocks = paddocks.filter((p) => p.id !== session.paddock_id);
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-        <div className="p-5">
-          <h2 className="text-lg font-bold text-green-900 mb-1">Move Herd</h2>
-          <p className="text-sm text-gray-500 mb-4">
-            Moving <strong>{herd.name}</strong> ({herd.head_count} head)
-          </p>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1100] flex items-center justify-center p-4">
+      <div className="bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-white/90 uppercase tracking-wide">Move Herd</h2>
+              <p className="text-xs text-white/40 mt-0.5">
+                {herd.name} · {herd.head_count} head
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-white/30 hover:text-white/70 transition-colors ml-2"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
 
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Target Paddock
-          </label>
-          <select
-            value={targetPaddockId}
-            onChange={(e) => setTargetPaddockId(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 mb-3 text-sm"
-          >
-            <option value="">Select paddock...</option>
-            {availablePaddocks.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} {p.acreage ? `(${p.acreage} ac)` : ''}
-              </option>
-            ))}
-          </select>
+          {/* Target paddock */}
+          <div className="mb-3">
+            <label className={labelCls}>Target Paddock</label>
+            <select
+              value={targetPaddockId}
+              onChange={(e) => setTargetPaddockId(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">Select paddock...</option>
+              {availablePaddocks.map((p) => (
+                <option key={p.id} value={p.id} className="bg-zinc-900">
+                  {p.name}{p.acreage ? ` (${p.acreage} ac)` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
 
+          {/* Rotation recommendation */}
           {recommendation && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3 text-sm">
-              <p className="font-medium text-green-900 mb-1">Rotation Recommendation</p>
-              <div className="grid grid-cols-2 gap-1 text-green-700 text-xs">
-                <span>Animal Units: {recommendation.animalUnits}</span>
-                <span>Daily DMI: {recommendation.dailyDMI} lbs</span>
-                <span>Forage Rate: {recommendation.foragePerAcrePerDay} lbs/ac/day</span>
-                <span className="font-bold text-green-900">
-                  Max Days: {recommendation.maxDays}
-                </span>
+            <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg px-3 py-2.5 mb-3">
+              <p className="text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">Rotation Rec</p>
+              <div className="grid grid-cols-2 gap-1 text-xs text-white/50">
+                <span>AU: {recommendation.animalUnits}</span>
+                <span>DMI: {recommendation.dailyDMI} lbs/day</span>
+                <span>Forage: {recommendation.foragePerAcrePerDay} lbs/ac/day</span>
+                <span className="font-semibold text-white/80">Max: {recommendation.maxDays} days</span>
               </div>
             </div>
           )}
 
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Notes (optional)
-          </label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-            className="w-full border rounded-lg px-3 py-2 mb-4 text-sm"
-            placeholder="Move notes..."
-          />
+          {/* Notes */}
+          <div className="mb-4">
+            <label className={labelCls}>Notes (optional)</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className={inputCls + ' resize-none'}
+              placeholder="Move notes..."
+            />
+          </div>
 
+          {/* Actions */}
           <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2 text-sm font-medium bg-white/[0.08] hover:bg-white/[0.12] text-white/60 hover:text-white/80 border border-white/10 rounded-lg transition-all duration-150"
+            >
+              Cancel
+            </button>
             <button
               onClick={handleMove}
               disabled={!targetPaddockId || saving}
-              className="flex-1 bg-green-700 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-green-600 disabled:opacity-50"
+              className="flex-1 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {saving ? 'Moving...' : 'Confirm Move'}
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 bg-gray-200 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-300"
-            >
-              Cancel
+              {saving ? 'Moving…' : 'Confirm Move'}
             </button>
           </div>
         </div>

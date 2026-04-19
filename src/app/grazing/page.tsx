@@ -9,6 +9,9 @@ import MoveHerdDialog from '@/components/MoveHerdDialog';
 
 type Tab = 'current' | 'planned' | 'recent';
 
+const inputCls = 'w-full px-3 py-2 text-sm bg-white/[0.08] border border-white/10 text-white placeholder-white/25 rounded-lg focus:outline-none focus:border-white/25 focus:bg-white/[0.10] transition-all duration-150';
+const labelCls = 'block text-xs text-white/40 font-medium mb-1';
+
 export default function GrazingPage() {
   const [sessions, setSessions] = useState<GrazingSession[]>([]);
   const [herds, setHerds] = useState<Herd[]>([]);
@@ -57,7 +60,6 @@ export default function GrazingPage() {
       .update({ status: 'suspended', suspended_date: today })
       .eq('id', session.id);
 
-    // Log event
     await supabase.from('move_events').insert({
       herd_id: session.herd_id,
       from_paddock_id: session.paddock_id,
@@ -76,7 +78,6 @@ export default function GrazingPage() {
 
     let plannedDays = newForm.planned_days ? parseInt(newForm.planned_days) : null;
 
-    // Auto-calculate if not provided
     if (!plannedDays && herd && paddock && herd.avg_weight_lbs && paddock.acreage) {
       const rec = calculateRotation({
         headCount: herd.head_count,
@@ -94,13 +95,11 @@ export default function GrazingPage() {
       status: 'active',
     });
 
-    // Update herd location
     await supabase
       .from('herds')
       .update({ current_paddock_id: newForm.paddock_id })
       .eq('id', newForm.herd_id);
 
-    // Log event
     await supabase.from('move_events').insert({
       herd_id: newForm.herd_id,
       to_paddock_id: newForm.paddock_id,
@@ -113,11 +112,6 @@ export default function GrazingPage() {
     fetchData();
   };
 
-  const moveHerd = (session: GrazingSession) => {
-    setMoveSession(session);
-  };
-
-  // Rotation recommendation preview
   const previewRec = (() => {
     if (!newForm.herd_id || !newForm.paddock_id) return null;
     const herd = herds.find((h) => h.id === newForm.herd_id);
@@ -138,11 +132,15 @@ export default function GrazingPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-green-900">Grazing Sessions</h1>
+        <div>
+          <h1 className="text-base font-semibold text-white/90 tracking-tight">Grazing Sessions</h1>
+          <p className="text-xs text-white/40 mt-0.5">{filtered.length} {tab}</p>
+        </div>
         <button
           onClick={() => setShowNewSession(true)}
-          className="bg-green-700 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-green-600"
+          className="px-4 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-900 rounded-lg transition-colors duration-150"
         >
           + New Session
         </button>
@@ -150,75 +148,90 @@ export default function GrazingPage() {
 
       {/* New session form */}
       {showNewSession && (
-        <div className="bg-white rounded-lg border border-gray-200 p-5 mb-6">
-          <h2 className="font-bold text-green-900 mb-3">Start Grazing Session</h2>
+        <div className="bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-5 mb-5">
+          <h2 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">
+            Start Grazing Session
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Herd</label>
+              <label className={labelCls}>Herd</label>
               <select
                 value={newForm.herd_id}
                 onChange={(e) => setNewForm({ ...newForm, herd_id: e.target.value })}
-                className="w-full border rounded px-3 py-2 text-sm"
+                className={inputCls}
               >
                 <option value="">Select herd...</option>
                 {herds.filter((h) => h.status === 'active').map((h) => (
-                  <option key={h.id} value={h.id}>{h.name} ({h.head_count} head)</option>
+                  <option key={h.id} value={h.id} className="bg-zinc-900">
+                    {h.name} ({h.head_count} head)
+                  </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Paddock</label>
+              <label className={labelCls}>Paddock</label>
               <select
                 value={newForm.paddock_id}
                 onChange={(e) => setNewForm({ ...newForm, paddock_id: e.target.value })}
-                className="w-full border rounded px-3 py-2 text-sm"
+                className={inputCls}
               >
                 <option value="">Select paddock...</option>
                 {paddocks.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} {p.acreage ? `(${p.acreage} ac)` : ''}</option>
+                  <option key={p.id} value={p.id} className="bg-zinc-900">
+                    {p.name}{p.acreage ? ` (${p.acreage} ac)` : ''}
+                  </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Move-in Date</label>
+              <label className={labelCls}>Move-in Date</label>
               <input
                 type="date"
                 value={newForm.move_in_date}
                 onChange={(e) => setNewForm({ ...newForm, move_in_date: e.target.value })}
-                className="w-full border rounded px-3 py-2 text-sm"
+                className={inputCls}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Planned Days {previewRec ? `(rec: ${previewRec.maxDays})` : ''}
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-white/40 font-medium">Planned Days</label>
+                {previewRec && (
+                  <span className="text-xs text-amber-400/80 font-medium">rec: {previewRec.maxDays}</span>
+                )}
+              </div>
               <input
                 type="number"
                 value={newForm.planned_days}
                 onChange={(e) => setNewForm({ ...newForm, planned_days: e.target.value })}
-                placeholder={previewRec ? `${Math.round(previewRec.maxDays)}` : ''}
-                className="w-full border rounded px-3 py-2 text-sm"
+                placeholder={previewRec ? `${Math.round(previewRec.maxDays)}` : 'Days'}
+                className={inputCls}
               />
             </div>
           </div>
 
           {previewRec && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-3 text-sm">
-              <p className="font-medium text-green-900 mb-1">Rotation Recommendation</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-1 text-green-700 text-xs">
+            <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg px-3 py-2.5 mt-3">
+              <p className="text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wide">Rotation Recommendation</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-1 text-xs text-white/50">
                 <span>AU: {previewRec.animalUnits}</span>
                 <span>DMI: {previewRec.dailyDMI} lbs/day</span>
                 <span>Forage: {previewRec.foragePerAcrePerDay} lbs/ac/day</span>
-                <span className="font-bold">Max: {previewRec.maxDays} days</span>
+                <span className="font-semibold text-white/80">Max: {previewRec.maxDays} days</span>
               </div>
             </div>
           )}
 
-          <div className="flex gap-2 mt-4">
-            <button onClick={startNewSession} className="bg-green-700 text-white rounded px-4 py-2 text-sm font-medium hover:bg-green-600">
+          <div className="flex gap-2 mt-4 pt-4 border-t border-white/[0.06]">
+            <button
+              onClick={startNewSession}
+              className="px-4 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg transition-colors duration-150"
+            >
               Start Session
             </button>
-            <button onClick={() => setShowNewSession(false)} className="bg-gray-200 text-gray-700 rounded px-4 py-2 text-sm font-medium">
+            <button
+              onClick={() => setShowNewSession(false)}
+              className="px-4 py-2 text-sm font-medium bg-white/[0.08] hover:bg-white/[0.12] text-white/60 hover:text-white/80 border border-white/10 rounded-lg transition-all duration-150"
+            >
               Cancel
             </button>
           </div>
@@ -226,13 +239,15 @@ export default function GrazingPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-green-100 rounded-lg p-1">
+      <div className="flex gap-0.5 mb-5 bg-white/[0.06] rounded-lg p-0.5">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              tab === t.key ? 'bg-white text-green-900 shadow-sm' : 'text-green-700 hover:text-green-900'
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-150 ${
+              tab === t.key
+                ? 'bg-white/[0.10] text-white/90'
+                : 'text-white/40 hover:text-white/60'
             }`}
           >
             {t.label}
@@ -246,18 +261,17 @@ export default function GrazingPage() {
           <GrazingSessionCard
             key={s.id}
             session={s}
-            onMove={() => moveHerd(s)}
+            onMove={() => setMoveSession(s)}
             onSuspend={() => suspendSession(s)}
           />
         ))}
         {filtered.length === 0 && (
-          <div className="text-center text-gray-400 py-12">
+          <div className="text-center text-white/20 text-sm py-12">
             No {tab} sessions found.
           </div>
         )}
       </div>
 
-      {/* Move dialog */}
       {moveSession && (
         <MoveHerdDialog
           session={moveSession}

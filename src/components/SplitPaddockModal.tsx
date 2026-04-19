@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { X } from 'lucide-react';
 import type { Paddock } from '@/lib/types';
 
 interface Props {
@@ -79,9 +80,7 @@ export default function SplitPaddockModal({ paddock, onConfirm, onClose }: Props
             className="text-white/40 hover:text-white/80 transition-colors ml-2"
             aria-label="Close"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -148,7 +147,7 @@ export default function SplitPaddockModal({ paddock, onConfirm, onClose }: Props
           </button>
           <button
             onClick={handleConfirm}
-            className="flex-1 py-2 text-xs font-medium text-white/90 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg transition-colors"
+            className="flex-1 py-2 text-xs font-medium bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg transition-colors"
           >
             Split
           </button>

@@ -19,42 +19,42 @@ const typeLabels: Record<string, string> = {
   other: 'Other',
 };
 
-const statusStyles: Record<string, string> = {
-  active: 'bg-green-100 text-green-800',
-  suspended: 'bg-yellow-100 text-yellow-800',
-  'moved-out': 'bg-gray-100 text-gray-600',
-  sold: 'bg-red-100 text-red-800',
+const statusBadge: Record<string, string> = {
+  active: 'bg-green-500/20 text-green-400 border border-green-500/20',
+  suspended: 'bg-white/[0.08] text-white/50 border border-white/10',
+  'moved-out': 'bg-white/[0.08] text-white/50 border border-white/10',
+  sold: 'bg-red-500/20 text-red-400 border border-red-500/20',
 };
 
 export default function HerdCard({ herd, paddockName }: Props) {
   return (
     <Link
       href={`/herds/${herd.id}`}
-      className="block bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
+      className="block bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl p-4 hover:bg-zinc-900/95 transition-colors duration-150"
     >
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-bold text-green-900">{herd.name}</h3>
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusStyles[herd.status ?? 'active']}`}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-white/90 truncate">{herd.name}</h3>
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusBadge[herd.status ?? 'active']}`}>
           {herd.status ?? 'active'}
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-sm">
+      <div className="grid grid-cols-2 gap-2">
         <div>
-          <span className="text-gray-500">Head</span>
-          <p className="font-medium">{herd.head_count}</p>
+          <p className="text-xs text-white/40 font-medium">Head</p>
+          <p className="text-sm font-semibold text-white/80 mt-0.5">{herd.head_count}</p>
         </div>
         <div>
-          <span className="text-gray-500">Avg Weight</span>
-          <p className="font-medium">{herd.avg_weight_lbs ?? '—'} lbs</p>
+          <p className="text-xs text-white/40 font-medium">Avg Weight</p>
+          <p className="text-sm font-semibold text-white/80 mt-0.5">{herd.avg_weight_lbs ?? '—'} lbs</p>
         </div>
         <div>
-          <span className="text-gray-500">Type</span>
-          <p className="font-medium">{typeLabels[herd.herd_type ?? ''] ?? '—'}</p>
+          <p className="text-xs text-white/40 font-medium">Type</p>
+          <p className="text-sm font-semibold text-white/80 mt-0.5">{typeLabels[herd.herd_type ?? ''] ?? '—'}</p>
         </div>
         <div>
-          <span className="text-gray-500">Paddock</span>
-          <p className="font-medium truncate">{paddockName ?? '—'}</p>
+          <p className="text-xs text-white/40 font-medium">Paddock</p>
+          <p className="text-sm font-semibold text-white/80 mt-0.5 truncate">{paddockName ?? '—'}</p>
         </div>
       </div>
     </Link>
