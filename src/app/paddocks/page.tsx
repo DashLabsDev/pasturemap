@@ -205,7 +205,7 @@ export default function PaddocksPage() {
       )}
 
       {/* Table */}
-      <div className="bg-zinc-900 border border-white/[0.08] rounded-xl overflow-hidden">
+      <div className="bg-zinc-900 border border-white/[0.08] rounded-xl overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-white/[0.06]">
@@ -222,7 +222,7 @@ export default function PaddocksPage() {
               <th className="text-left px-4 py-3 text-xs font-medium text-white/35 uppercase tracking-widest">Acres</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-white/35 uppercase tracking-widest hidden md:table-cell">Fence</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-white/35 uppercase tracking-widest hidden md:table-cell">Water</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-white/35 uppercase tracking-widest">Herd</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-white/35 uppercase tracking-widest hidden md:table-cell">Herd</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-white/35 uppercase tracking-widest">Status</th>
               <th className="px-4 py-3 w-20"></th>
             </tr>
@@ -252,7 +252,7 @@ export default function PaddocksPage() {
                   <td className="px-4 py-3 text-white/50 tabular-nums">{p.acreage ?? '—'}</td>
                   <td className="px-4 py-3 text-white/50 capitalize hidden md:table-cell">{p.fence_type ?? '—'}</td>
                   <td className="px-4 py-3 text-white/50 capitalize hidden md:table-cell">{p.water_source ?? '—'}</td>
-                  <td className="px-4 py-3 text-white/50">{herd?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-white/50 hidden md:table-cell">{herd?.name ?? '—'}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide ${status.badge}`}>
                       {status.label}
