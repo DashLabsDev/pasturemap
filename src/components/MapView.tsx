@@ -386,8 +386,8 @@ export default function MapView() {
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* Address search bar */}
-      <div className="absolute top-4 left-4 z-[1000] w-72">
+      {/* Address search bar — on mobile push right to clear hamburger */}
+      <div className="absolute top-4 left-14 md:left-4 z-[1000] w-[calc(100%-4rem)] md:w-72">
         <div className="relative">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none"
             fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
