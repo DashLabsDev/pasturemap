@@ -5,11 +5,8 @@ import dynamic from 'next/dynamic';
 const MapView = dynamic(() => import('@/components/MapView'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-green-900 text-white">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4" />
-        <p>Loading map...</p>
-      </div>
+    <div className="w-full h-full flex items-center justify-center bg-[#0e0f0f]">
+      <div className="w-5 h-5 border-2 border-white/10 border-t-white/50 rounded-full animate-spin" />
     </div>
   ),
 });
