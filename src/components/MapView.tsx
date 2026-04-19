@@ -116,57 +116,92 @@ function detectSplitAxis(bbox: [number, number, number, number]): 'ew' | 'ns' {
   return widthM >= heightM ? 'ew' : 'ns';
 }
 
+// Clip a polygon feature to a bounding box and return the largest polygon piece
+function clipToBox(feat: GeoJSON.Feature<GeoJSON.Polygon>, box: GeoJSON.Feature<GeoJSON.Polygon>): GeoJSON.Polygon | null {
+  const intersection = turfIntersect(featureCollection([feat, box]));
+  if (!intersection) return null;
+  if (intersection.geometry.type === 'Polygon') return intersection.geometry as GeoJSON.Polygon;
+  if (intersection.geometry.type === 'MultiPolygon') {
+    const polys = (intersection.geometry as GeoJSON.MultiPolygon).coordinates;
+    const largest = polys.reduce((a, b) =>
+      turfArea(turfPolygon(a)) > turfArea(turfPolygon(b)) ? a : b
+    );
+    return { type: 'Polygon', coordinates: largest };
+  }
+  return null;
+}
+
+// Build a clipping box from coordinate bounds
+function makeBox(minLng: number, minLat: number, maxLng: number, maxLat: number) {
+  return turfPolygon([[
+    [minLng, minLat], [maxLng, minLat],
+    [maxLng, maxLat], [minLng, maxLat],
+    [minLng, minLat],
+  ]]);
+}
+
+// Measure the area (m²) of the polygon on one side of a cut line
+function areaOnSide(
+  feat: GeoJSON.Feature<GeoJSON.Polygon>,
+  bbox: [number, number, number, number],
+  axis: 'ew' | 'ns',
+  cutValue: number,
+): number {
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  const buf = 0.00001;
+  const box = axis === 'ew'
+    ? makeBox(minLng - buf, minLat - buf, cutValue, maxLat + buf)
+    : makeBox(minLng - buf, minLat - buf, maxLng + buf, cutValue);
+  const clipped = clipToBox(feat, box);
+  return clipped ? turfArea(feature(clipped)) : 0;
+}
+
+// Binary search for the cut line where the 'low' side has exactly targetArea (m²)
+function findEqualAreaCut(
+  feat: GeoJSON.Feature<GeoJSON.Polygon>,
+  bbox: [number, number, number, number],
+  axis: 'ew' | 'ns',
+  lo: number,
+  hi: number,
+  targetArea: number,
+): number {
+  let low = lo, high = hi;
+  for (let iter = 0; iter < 30; iter++) {
+    const mid = (low + high) / 2;
+    const area = areaOnSide(feat, bbox, axis, mid);
+    if (area < targetArea) low = mid;
+    else high = mid;
+  }
+  return (low + high) / 2;
+}
+
 function splitPolygonIntoStrips(boundary: GeoJSON.Polygon, count: number): GeoJSON.Polygon[] {
   const feat = feature(boundary);
   const bbox = turfBbox(feat) as [number, number, number, number];
   const [minLng, minLat, maxLng, maxLat] = bbox;
   const axis = detectSplitAxis(bbox);
-  const results: GeoJSON.Polygon[] = [];
+  const buf = 0.00001;
+  const totalArea = turfArea(feat);
+  const targetPerStrip = totalArea / count;
 
-  if (axis === 'ew') {
-    // Wide paddock: cut into vertical strips west→east
-    const lngStep = (maxLng - minLng) / count;
-    for (let i = 0; i < count; i++) {
-      const bufL = i === 0 ? minLng + i * lngStep - 0.00001 : minLng + i * lngStep;
-      const bufR = i === count - 1 ? minLng + (i + 1) * lngStep + 0.00001 : minLng + (i + 1) * lngStep;
-      const stripBox = turfPolygon([[
-        [bufL, minLat - 0.00001], [bufR, minLat - 0.00001],
-        [bufR, maxLat + 0.00001], [bufL, maxLat + 0.00001],
-        [bufL, minLat - 0.00001],
-      ]]);
-      const intersection = turfIntersect(featureCollection([feat, stripBox]));
-      if (intersection && intersection.geometry.type === 'Polygon') {
-        results.push(intersection.geometry as GeoJSON.Polygon);
-      } else if (intersection && intersection.geometry.type === 'MultiPolygon') {
-        const polys = (intersection.geometry as GeoJSON.MultiPolygon).coordinates;
-        const largest = polys.reduce((a, b) =>
-          turfArea(turfPolygon(a)) > turfArea(turfPolygon(b)) ? a : b
-        );
-        results.push({ type: 'Polygon', coordinates: largest });
-      }
-    }
-  } else {
-    // Tall paddock: cut into horizontal strips north→south
-    const latStep = (maxLat - minLat) / count;
-    for (let i = 0; i < count; i++) {
-      const bufB = i === 0 ? minLat + i * latStep - 0.00001 : minLat + i * latStep;
-      const bufT = i === count - 1 ? minLat + (i + 1) * latStep + 0.00001 : minLat + (i + 1) * latStep;
-      const stripBox = turfPolygon([[
-        [minLng - 0.00001, bufB], [maxLng + 0.00001, bufB],
-        [maxLng + 0.00001, bufT], [minLng - 0.00001, bufT],
-        [minLng - 0.00001, bufB],
-      ]]);
-      const intersection = turfIntersect(featureCollection([feat, stripBox]));
-      if (intersection && intersection.geometry.type === 'Polygon') {
-        results.push(intersection.geometry as GeoJSON.Polygon);
-      } else if (intersection && intersection.geometry.type === 'MultiPolygon') {
-        const polys = (intersection.geometry as GeoJSON.MultiPolygon).coordinates;
-        const largest = polys.reduce((a, b) =>
-          turfArea(turfPolygon(a)) > turfArea(turfPolygon(b)) ? a : b
-        );
-        results.push({ type: 'Polygon', coordinates: largest });
-      }
-    }
+  // Find N-1 cut lines using binary search so each strip has equal area
+  const cuts: number[] = [];
+  const coordMin = axis === 'ew' ? minLng : minLat;
+  const coordMax = axis === 'ew' ? maxLng : maxLat;
+  for (let i = 1; i < count; i++) {
+    const cumulativeTarget = targetPerStrip * i;
+    cuts.push(findEqualAreaCut(feat, bbox, axis, coordMin, coordMax, cumulativeTarget));
+  }
+
+  // Build strips from the cut lines
+  const boundaries = [coordMin - buf, ...cuts, coordMax + buf];
+  const results: GeoJSON.Polygon[] = [];
+  for (let i = 0; i < count; i++) {
+    const box = axis === 'ew'
+      ? makeBox(boundaries[i], minLat - buf, boundaries[i + 1], maxLat + buf)
+      : makeBox(minLng - buf, boundaries[i], maxLng + buf, boundaries[i + 1]);
+    const clipped = clipToBox(feat, box);
+    if (clipped) results.push(clipped);
   }
   return results;
 }
