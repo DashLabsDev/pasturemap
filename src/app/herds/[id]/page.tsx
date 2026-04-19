@@ -113,12 +113,12 @@ export default function HerdDetailPage() {
 
   if (!herd) {
     return (
-      <div className="p-6 text-center text-gray-400">Loading herd...</div>
+      <div className="px-6 pt-14 pb-6 text-center text-gray-400">Loading herd...</div>
     );
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="px-6 pt-14 pb-6 md:p-6 max-w-5xl mx-auto">
       <button onClick={() => router.push('/herds')} className="text-green-700 text-sm mb-4 hover:text-green-900">
         &larr; Back to Herds
       </button>
