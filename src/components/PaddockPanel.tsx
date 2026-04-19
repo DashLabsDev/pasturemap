@@ -12,74 +12,102 @@ interface Props {
 
 export default function PaddockPanel({ paddock, herd, session, onClose }: Props) {
   const grazingDays = session ? daysSince(session.move_in_date) : null;
-  const statusLabel = session ? 'Grazing' : 'Resting';
-  const statusColor = session ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600';
+  const isGrazing = session !== null;
+  const progress =
+    session?.planned_days && grazingDays !== null
+      ? Math.min(100, (grazingDays / session.planned_days) * 100)
+      : null;
 
   return (
-    <div className="absolute bottom-4 right-4 z-[1000] bg-white rounded-lg shadow-xl w-80 max-h-[60vh] overflow-y-auto">
-      <div className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-lg text-green-900">{paddock.name}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">
-            &times;
+    <div className="absolute top-4 left-4 z-[1000] bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl w-72 max-h-[80vh] overflow-y-auto">
+      <div className="p-5">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-white/90">{paddock.name}</h3>
+            {paddock.parent_paddock_id && (
+              <span className="text-xs text-white/30">subdivision</span>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="text-white/40 hover:text-white/80 transition-colors ml-2 flex-shrink-0"
+            aria-label="Close"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
-        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusColor}`}>
-          {statusLabel}
-        </span>
+        {/* Status badge */}
+        <div className="mb-4">
+          {isGrazing ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/20">
+              Grazing
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white/[0.08] text-white/50 border border-white/10">
+              Resting
+            </span>
+          )}
+        </div>
 
-        <div className="mt-3 space-y-2 text-sm">
+        {/* Data rows */}
+        <div className="space-y-2 mb-4">
           {paddock.acreage && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Acreage</span>
-              <span className="font-medium">{paddock.acreage} ac</span>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-white/40">Acreage</span>
+              <span className="text-sm font-semibold text-white/80">{paddock.acreage} ac</span>
             </div>
           )}
           {paddock.fence_type && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Fence</span>
-              <span className="font-medium capitalize">{paddock.fence_type}</span>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-white/40">Fence</span>
+              <span className="text-sm text-white/80 capitalize">{paddock.fence_type}</span>
             </div>
           )}
           {paddock.water_source && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Water</span>
-              <span className="font-medium capitalize">{paddock.water_source}</span>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-white/40">Water</span>
+              <span className="text-sm text-white/80 capitalize">{paddock.water_source}</span>
             </div>
           )}
         </div>
 
+        {/* Herd section */}
         {herd && (
-          <div className="mt-4 p-3 bg-amber-50 rounded-lg">
-            <p className="text-sm font-medium text-amber-900">
-              🐄 {herd.name}
-            </p>
-            <p className="text-xs text-amber-700 mt-1">
-              {herd.head_count} head &middot; {herd.avg_weight_lbs ?? '?'} lbs avg
+          <div className="bg-white/[0.06] rounded-lg px-3 py-2.5 mb-3">
+            <p className="text-sm font-medium text-white/80">{herd.name}</p>
+            <p className="text-xs text-white/40 mt-0.5">
+              {herd.head_count} head{herd.avg_weight_lbs ? ` · ${herd.avg_weight_lbs} lbs avg` : ''}
             </p>
           </div>
         )}
 
+        {/* Active session */}
         {session && grazingDays !== null && (
-          <div className="mt-3 p-3 bg-green-50 rounded-lg">
-            <p className="text-sm font-medium text-green-900">Active Session</p>
-            <p className="text-xs text-green-700 mt-1">
-              Day {grazingDays} of {session.planned_days ?? '?'} planned
-            </p>
-            {session.planned_days && (
-              <div className="mt-2 bg-green-200 rounded-full h-2">
+          <div className="bg-white/[0.06] rounded-lg px-3 py-2.5 mb-3">
+            <div className="flex justify-between items-center mb-1.5">
+              <p className="text-xs font-medium text-white/60 uppercase tracking-wide">Active Session</p>
+              <p className="text-xs text-white/40">
+                Day {grazingDays}{session.planned_days ? ` / ${session.planned_days}` : ''}
+              </p>
+            </div>
+            {progress !== null && (
+              <div className="bg-white/[0.08] rounded-full h-1.5">
                 <div
-                  className="bg-green-600 rounded-full h-2 transition-all"
-                  style={{ width: `${Math.min(100, (grazingDays / session.planned_days) * 100)}%` }}
+                  className="bg-green-500 rounded-full h-1.5 transition-all duration-300"
+                  style={{ width: `${progress}%` }}
                 />
               </div>
             )}
           </div>
         )}
 
+        {/* Notes */}
         {paddock.notes && (
-          <p className="mt-3 text-xs text-gray-500 italic">{paddock.notes}</p>
+          <p className="text-xs text-white/40 italic leading-relaxed">{paddock.notes}</p>
         )}
       </div>
     </div>
