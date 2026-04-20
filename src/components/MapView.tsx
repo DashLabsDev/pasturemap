@@ -19,6 +19,7 @@ mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
 const DEFAULT_CENTER: [number, number] = [-92.3938, 36.9228];
 const DEFAULT_ZOOM = 14;
 const VIEW_KEY = 'pasturemap:view';
+const HOME_KEY = 'pasturemap:home';
 
 function loadSavedView(): { center: [number, number]; zoom: number } {
   if (typeof window === 'undefined') return { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
@@ -36,6 +37,24 @@ function loadSavedView(): { center: [number, number]; zoom: number } {
 
 function saveView(center: [number, number], zoom: number) {
   try { localStorage.setItem(VIEW_KEY, JSON.stringify({ center, zoom })); } catch { /* ignore */ }
+}
+
+function loadHomeLocation(): { center: [number, number]; zoom: number } {
+  if (typeof window === 'undefined') return { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
+  try {
+    const raw = localStorage.getItem(HOME_KEY);
+    if (raw) {
+      const v = JSON.parse(raw);
+      if (Array.isArray(v.center) && v.center.length === 2 && typeof v.zoom === 'number') {
+        return { center: v.center as [number, number], zoom: v.zoom };
+      }
+    }
+  } catch { /* ignore */ }
+  return { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
+}
+
+function saveHomeLocation(center: [number, number], zoom: number) {
+  try { localStorage.setItem(HOME_KEY, JSON.stringify({ center, zoom })); } catch { /* ignore */ }
 }
 
 function buildPaddockFeatureCollection(
@@ -395,7 +414,7 @@ export default function MapView() {
       const map = mapRef.current;
       if (!map) return;
       const c = map.getCenter();
-      saveView([c.lng, c.lat], map.getZoom());
+      saveHomeLocation([c.lng, c.lat], map.getZoom());
       setHomeSaved(true);
       setTimeout(() => setHomeSaved(false), 2000);
     }, 600);
@@ -407,8 +426,8 @@ export default function MapView() {
     // Short tap → fly to saved home
     const map = mapRef.current;
     if (!map) return;
-    const saved = loadSavedView();
-    map.flyTo({ center: saved.center, zoom: saved.zoom, duration: 1000 });
+    const home = loadHomeLocation();
+    map.flyTo({ center: home.center, zoom: home.zoom, duration: 1000 });
   };
 
   const handleSearchInput = (value: string) => {
@@ -438,7 +457,7 @@ export default function MapView() {
       <div ref={mapContainer} className="w-full h-full" />
 
       {/* Address search bar — on mobile push right to clear hamburger */}
-      <div className="absolute top-4 left-14 md:left-4 z-[1000] w-[calc(100%-4rem)] md:w-72">
+      <div className="absolute top-4 left-14 md:left-4 z-[1000] w-[calc(100%-7.5rem)] md:w-72">
         <div className="relative">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none"
             fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
