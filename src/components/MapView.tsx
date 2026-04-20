@@ -375,15 +375,27 @@ export default function MapView() {
   const handleGPS = () => {
     if (!navigator.geolocation) return;
     setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
+    // Use watchPosition to get progressively more accurate fixes
+    let bestAccuracy = Infinity;
+    const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        const { longitude, latitude } = pos.coords;
-        mapRef.current?.flyTo({ center: [longitude, latitude], zoom: 16, duration: 1000 });
-        setGpsLoading(false);
+        const { longitude, latitude, accuracy } = pos.coords;
+        // Always fly to the first fix, then update if accuracy improves
+        if (accuracy < bestAccuracy) {
+          bestAccuracy = accuracy;
+          mapRef.current?.flyTo({ center: [longitude, latitude], zoom: 16, duration: 1000 });
+        }
+        // Once we have <50m accuracy, stop watching
+        if (accuracy < 50) {
+          navigator.geolocation.clearWatch(watchId);
+          setGpsLoading(false);
+        }
       },
-      () => setGpsLoading(false),
-      { timeout: 8000, enableHighAccuracy: true }
+      () => { navigator.geolocation.clearWatch(watchId); setGpsLoading(false); },
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
     );
+    // Safety timeout — stop watching after 15s regardless
+    setTimeout(() => { navigator.geolocation.clearWatch(watchId); setGpsLoading(false); }, 15000);
   };
 
   const handlePinHome = () => {
