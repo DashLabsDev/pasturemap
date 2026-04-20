@@ -384,13 +384,31 @@ export default function MapView() {
   };
 
 
-  const handlePinHome = () => {
+  // Tap → fly to saved home; long-press → save current view as home
+  const homePressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const homeLongFired = useRef(false);
+
+  const handleHomePointerDown = () => {
+    homeLongFired.current = false;
+    homePressTimer.current = setTimeout(() => {
+      homeLongFired.current = true;
+      const map = mapRef.current;
+      if (!map) return;
+      const c = map.getCenter();
+      saveView([c.lng, c.lat], map.getZoom());
+      setHomeSaved(true);
+      setTimeout(() => setHomeSaved(false), 2000);
+    }, 600);
+  };
+
+  const handleHomePointerUp = () => {
+    if (homePressTimer.current) clearTimeout(homePressTimer.current);
+    if (homeLongFired.current) return; // already saved
+    // Short tap → fly to saved home
     const map = mapRef.current;
     if (!map) return;
-    const c = map.getCenter();
-    saveView([c.lng, c.lat], map.getZoom());
-    setHomeSaved(true);
-    setTimeout(() => setHomeSaved(false), 2000);
+    const saved = loadSavedView();
+    map.flyTo({ center: saved.center, zoom: saved.zoom, duration: 1000 });
   };
 
   const handleSearchInput = (value: string) => {
@@ -447,16 +465,19 @@ export default function MapView() {
 
       {/* Pin Home button — bottom-left, above Mapbox geolocate control */}
       <div className="absolute bottom-20 left-2.5 z-[1000]">
-        <button onClick={handlePinHome}
-          title="Save this view as home — map will open here next time"
-          className={`w-[30px] h-[30px] flex items-center justify-center rounded shadow transition-all duration-150 ${
+        <button
+          onPointerDown={handleHomePointerDown}
+          onPointerUp={handleHomePointerUp}
+          onPointerCancel={() => homePressTimer.current && clearTimeout(homePressTimer.current)}
+          title="Tap: go home · Hold: save this view as home"
+          className={`w-[30px] h-[30px] flex items-center justify-center rounded shadow transition-all duration-150 select-none ${
             homeSaved
               ? 'bg-amber-500 border-amber-400 text-zinc-900'
               : 'bg-white text-gray-600 hover:text-black hover:bg-gray-100'
           }`}>
           {homeSaved ? (
-            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M20 6L9 17l-5-5"/>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+              <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           ) : (
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
