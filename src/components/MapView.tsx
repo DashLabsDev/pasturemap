@@ -221,7 +221,7 @@ export default function MapView() {
   const [newAcreage, setNewAcreage] = useState('');
   const [splitTarget, setSplitTarget] = useState<Paddock | null>(null);
   const [splitting, setSplitting] = useState(false);
-  const [gpsLoading, setGpsLoading] = useState(false);
+
   const [homeSaved, setHomeSaved] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -265,6 +265,15 @@ export default function MapView() {
 
     map.addControl(draw, 'top-right');
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+    // Built-in GPS control — blue dot, accuracy circle, handles platform quirks
+    const geolocate = new mapboxgl.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true },
+      trackUserLocation: true,
+      showUserHeading: true,
+      showAccuracyCircle: true,
+    });
+    map.addControl(geolocate, 'bottom-left');
     drawRef.current = draw;
     mapRef.current = map;
 
@@ -372,31 +381,6 @@ export default function MapView() {
     fetchData();
   };
 
-  const handleGPS = () => {
-    if (!navigator.geolocation) return;
-    setGpsLoading(true);
-    // Use watchPosition to get progressively more accurate fixes
-    let bestAccuracy = Infinity;
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const { longitude, latitude, accuracy } = pos.coords;
-        // Always fly to the first fix, then update if accuracy improves
-        if (accuracy < bestAccuracy) {
-          bestAccuracy = accuracy;
-          mapRef.current?.flyTo({ center: [longitude, latitude], zoom: 16, duration: 1000 });
-        }
-        // Once we have <50m accuracy, stop watching
-        if (accuracy < 50) {
-          navigator.geolocation.clearWatch(watchId);
-          setGpsLoading(false);
-        }
-      },
-      () => { navigator.geolocation.clearWatch(watchId); setGpsLoading(false); },
-      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
-    );
-    // Safety timeout — stop watching after 15s regardless
-    setTimeout(() => { navigator.geolocation.clearWatch(watchId); setGpsLoading(false); }, 15000);
-  };
 
   const handlePinHome = () => {
     const map = mapRef.current;
@@ -459,40 +443,21 @@ export default function MapView() {
         )}
       </div>
 
-      {/* GPS + Pin Home buttons — bottom-left */}
-      <div className="absolute bottom-6 left-4 z-[1000] flex flex-col gap-2">
-        {/* GPS button */}
-        <button onClick={handleGPS}
-          title="Jump to my current location"
-          className="w-10 h-10 flex items-center justify-center bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-lg shadow-xl text-white/60 hover:text-white hover:bg-zinc-800/90 transition-all duration-150 disabled:opacity-40"
-          disabled={gpsLoading}>
-          {gpsLoading ? (
-            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" strokeLinecap="round"/>
-            </svg>
-          )}
-        </button>
-
-        {/* Pin Home button */}
+      {/* Pin Home button — bottom-left, above Mapbox geolocate control */}
+      <div className="absolute bottom-20 left-2.5 z-[1000]">
         <button onClick={handlePinHome}
           title="Save this view as home — map will open here next time"
-          className={`w-10 h-10 flex items-center justify-center backdrop-blur-md border rounded-lg shadow-xl transition-all duration-150 ${
+          className={`w-[30px] h-[30px] flex items-center justify-center rounded shadow transition-all duration-150 ${
             homeSaved
               ? 'bg-amber-500 border-amber-400 text-zinc-900'
-              : 'bg-zinc-900/90 border-white/10 text-white/60 hover:text-white hover:bg-zinc-800/90'
+              : 'bg-white text-gray-600 hover:text-black hover:bg-gray-100'
           }`}>
           {homeSaved ? (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M20 6L9 17l-5-5"/>
             </svg>
           ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" strokeLinecap="round" strokeLinejoin="round"/>
               <polyline points="9,22 9,12 15,12 15,22" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
