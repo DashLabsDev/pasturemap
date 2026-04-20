@@ -275,28 +275,6 @@ export default function MapView() {
     });
     map.addControl(geolocate, 'bottom-left');
 
-    // DEBUG: show what coordinates the browser reports
-    geolocate.on('geolocate', (e: GeolocationPosition) => {
-      const { latitude, longitude, accuracy } = e.coords;
-      let dbg = document.getElementById('gps-debug');
-      if (!dbg) {
-        dbg = document.createElement('div');
-        dbg.id = 'gps-debug';
-        dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:rgba(0,0,0,0.85);color:#0f0;font:12px monospace;padding:8px;text-align:center;';
-        document.body.appendChild(dbg);
-      }
-      dbg.textContent = `GPS: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} | accuracy: ${accuracy.toFixed(0)}m`;
-    });
-    geolocate.on('error', (e: GeolocationPositionError) => {
-      let dbg = document.getElementById('gps-debug');
-      if (!dbg) {
-        dbg = document.createElement('div');
-        dbg.id = 'gps-debug';
-        dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:rgba(0,0,0,0.85);color:red;font:12px monospace;padding:8px;text-align:center;';
-        document.body.appendChild(dbg);
-      }
-      dbg.textContent = `GPS ERROR: ${e.message} (code ${e.code})`;
-    });
 
     drawRef.current = draw;
     mapRef.current = map;
