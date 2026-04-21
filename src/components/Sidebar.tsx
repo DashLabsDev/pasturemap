@@ -23,7 +23,8 @@ export default function Sidebar() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="md:hidden fixed top-3.5 left-3.5 z-[1100] w-8 h-8 flex items-center justify-center bg-white/[0.06] hover:bg-white/[0.10] border border-white/10 rounded-lg text-white/60 transition-colors"
+          style={{ left: 'calc(0.875rem + env(safe-area-inset-left))' }}
+          className="md:hidden fixed top-3.5 z-[1100] w-8 h-8 flex items-center justify-center bg-white/[0.06] hover:bg-white/[0.10] border border-white/10 rounded-lg text-white/60 transition-colors"
           aria-label="Open menu"
         >
           <Menu className="w-4 h-4" />

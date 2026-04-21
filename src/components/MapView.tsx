@@ -555,8 +555,14 @@ export default function MapView() {
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* Address search bar — on mobile push right to clear hamburger */}
-      <div className="absolute top-4 left-14 md:left-4 z-[1000] w-[calc(100%-7.5rem)] md:w-72">
+      {/* Address search bar — on mobile push right to clear hamburger; respect landscape notch */}
+      <div
+        className="absolute top-4 z-[1000] md:w-72"
+        style={{
+          left: 'calc(3.5rem + env(safe-area-inset-left))',
+          right: 'calc(1rem + env(safe-area-inset-right))',
+        }}
+      >
         <div className="relative">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none"
             fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -582,7 +588,10 @@ export default function MapView() {
       </div>
 
       {/* Pin Home button — bottom-left, above Mapbox geolocate control */}
-      <div className="absolute bottom-20 left-2.5 z-[1000]">
+      <div
+        className="absolute bottom-20 z-[1000]"
+        style={{ left: 'calc(0.625rem + env(safe-area-inset-left))' }}
+      >
         <button
           onPointerDown={handleHomePointerDown}
           onPointerUp={handleHomePointerUp}
@@ -623,9 +632,12 @@ export default function MapView() {
         </div>
       )}
 
-      {/* Walk Mode entry button — bottom-right, mirrors home button height so iOS URL bar can't cover it */}
+      {/* Walk Mode entry button — bottom-right, mirrors home button height; respect landscape notch */}
       {!walkVertices && !showNewForm && (
-        <div className="absolute bottom-20 right-2.5 z-[1000]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div
+          className="absolute bottom-20 z-[1000]"
+          style={{ right: 'calc(0.625rem + env(safe-area-inset-right))' }}
+        >
           <button onClick={startWalkMode}
             title="Walk the pasture and drop a pin at each corner"
             className="px-3 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg shadow-xl flex items-center gap-2 transition-colors duration-150">
@@ -682,7 +694,10 @@ export default function MapView() {
 
       {/* New paddock form */}
       {showNewForm && (
-        <div className="absolute top-4 left-16 md:left-4 z-[1000] w-72 bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-5">
+        <div
+          className="absolute top-4 z-[1000] w-72 bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-5"
+          style={{ left: 'calc(4rem + env(safe-area-inset-left))' }}
+        >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-white/90 tracking-wide uppercase">New Paddock</h3>
             <button onClick={() => { setShowNewForm(false); setNewBoundary(null); }}
