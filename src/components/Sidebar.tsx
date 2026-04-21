@@ -19,27 +19,29 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile toggle */}
-      <button
-        onClick={() => setOpen(true)}
-        className="md:hidden fixed top-3.5 left-3.5 z-50 w-8 h-8 flex items-center justify-center bg-white/[0.06] hover:bg-white/[0.10] border border-white/10 rounded-lg text-white/60 transition-colors"
-        aria-label="Open menu"
-      >
-        <Menu className="w-4 h-4" />
-      </button>
+      {/* Mobile toggle — hidden when drawer is open so the sidebar's own close (X) takes over */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="md:hidden fixed top-3.5 left-3.5 z-[1100] w-8 h-8 flex items-center justify-center bg-white/[0.06] hover:bg-white/[0.10] border border-white/10 rounded-lg text-white/60 transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu className="w-4 h-4" />
+        </button>
+      )}
 
-      {/* Mobile backdrop */}
+      {/* Mobile backdrop — above the map's z-1000 floating controls */}
       {open && (
         <div
-          className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-30"
+          className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[1900]"
           onClick={() => setOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — must sit above map search/Walk buttons (z-1000..1500) */}
       <aside
         className={`
-          fixed md:static z-40 h-full flex flex-col
+          fixed md:static z-[2000] md:z-auto h-full flex flex-col
           bg-zinc-950 border-r border-white/10
           transition-transform duration-200 ease-out
           w-64 shrink-0
