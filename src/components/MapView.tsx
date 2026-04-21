@@ -243,6 +243,11 @@ export default function MapView() {
 
   const [homeSaved, setHomeSaved] = useState(false);
 
+  // Walk Mode: null = inactive; array (possibly empty) = active. Each entry is [lng, lat].
+  const [walkVertices, setWalkVertices] = useState<[number, number][] | null>(null);
+  const [dropping, setDropping] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ id: string; place_name: string; center: [number, number] }>>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -316,6 +321,19 @@ export default function MapView() {
         layout: { 'text-field': ['get', 'name'], 'text-size': 14,
           'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'], 'text-allow-overlap': true },
         paint: { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1.5 } });
+
+      // Walk Mode in-progress polygon
+      map.addSource('walk-progress', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'walk-progress-fill', type: 'fill', source: 'walk-progress',
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.2 } });
+      map.addLayer({ id: 'walk-progress-line', type: 'line', source: 'walk-progress',
+        filter: ['!=', ['geometry-type'], 'Point'],
+        paint: { 'line-color': '#f59e0b', 'line-width': 3, 'line-dasharray': [2, 1] } });
+      map.addLayer({ id: 'walk-progress-points', type: 'circle', source: 'walk-progress',
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: { 'circle-radius': 6, 'circle-color': '#f59e0b',
+          'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff' } });
 
       map.addSource('herds', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'herds-circle', type: 'circle', source: 'herds',
@@ -402,6 +420,79 @@ export default function MapView() {
     fetchData();
   };
 
+
+  // Sync in-progress walk polygon to the map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource('walk-progress') as mapboxgl.GeoJSONSource | undefined;
+    if (!src) return;
+    if (!walkVertices || walkVertices.length === 0) {
+      src.setData({ type: 'FeatureCollection', features: [] });
+      return;
+    }
+    const features: GeoJSON.Feature[] = walkVertices.map((c, i) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: c },
+      properties: { index: i },
+    }));
+    if (walkVertices.length >= 2) {
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: walkVertices },
+        properties: {},
+      });
+    }
+    if (walkVertices.length >= 3) {
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [[...walkVertices, walkVertices[0]]] },
+        properties: {},
+      });
+    }
+    src.setData({ type: 'FeatureCollection', features });
+  }, [walkVertices]);
+
+  const startWalkMode = () => {
+    setWalkVertices([]);
+    setGpsError(null);
+  };
+
+  const dropCorner = () => {
+    if (dropping) return;
+    setDropping(true);
+    setGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const pt: [number, number] = [pos.coords.longitude, pos.coords.latitude];
+        setWalkVertices((prev) => (prev ? [...prev, pt] : [pt]));
+        mapRef.current?.easeTo({ center: pt, duration: 400 });
+        setDropping(false);
+      },
+      (err) => { setGpsError(err.message || 'GPS unavailable'); setDropping(false); },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  const undoCorner = () => {
+    setWalkVertices((prev) => (prev && prev.length > 0 ? prev.slice(0, -1) : prev));
+  };
+
+  const finishWalk = () => {
+    if (!walkVertices || walkVertices.length < 3) return;
+    const ring: [number, number][] = [...walkVertices, walkVertices[0]];
+    const geo: GeoJSON.Polygon = { type: 'Polygon', coordinates: [ring] };
+    const acres = turfArea({ type: 'Feature', geometry: geo, properties: {} }) / 4046.8564224;
+    setNewBoundary(geo);
+    setNewAcreage(acres.toFixed(2));
+    setShowNewForm(true);
+    setWalkVertices(null);
+  };
+
+  const cancelWalk = () => {
+    setWalkVertices(null);
+    setGpsError(null);
+  };
 
   // Tap → fly to saved home; long-press → save current view as home
   const homePressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -506,6 +597,64 @@ export default function MapView() {
           )}
         </button>
       </div>
+
+      {/* Walk Mode entry button — bottom-right, above Mapbox draw/nav controls */}
+      {!walkVertices && !showNewForm && (
+        <div className="absolute bottom-4 right-2.5 z-[1000]">
+          <button onClick={startWalkMode}
+            title="Walk the pasture and drop a pin at each corner"
+            className="px-3 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg shadow-xl flex items-center gap-2 transition-colors duration-150">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" strokeLinejoin="round"/>
+              <circle cx="12" cy="9" r="2.5"/>
+            </svg>
+            Walk Paddock
+          </button>
+        </div>
+      )}
+
+      {/* Walk Mode control panel — bottom-center, visible while walking */}
+      {walkVertices && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1500] w-[min(92vw,22rem)] bg-zinc-900/95 backdrop-blur-md border border-amber-400/30 rounded-xl shadow-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-amber-400/90 font-semibold">Walk Mode</div>
+              <div className="text-xs text-white/50 mt-0.5">
+                {walkVertices.length === 0 && 'Stand at a corner, then tap Drop Corner'}
+                {walkVertices.length === 1 && '1 corner — walk to the next'}
+                {walkVertices.length === 2 && '2 corners — need at least 3'}
+                {walkVertices.length >= 3 && `${walkVertices.length} corners — tap Finish when done`}
+              </div>
+            </div>
+            <button onClick={undoCorner} disabled={walkVertices.length === 0}
+              title="Remove last corner"
+              className="text-white/40 hover:text-white/80 disabled:opacity-20 disabled:cursor-not-allowed transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path d="M3 7v6h6M3 13c0-5 4-9 9-9a9 9 0 019 9 9 9 0 01-9 9" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          {gpsError && (
+            <div className="mb-2 px-2 py-1.5 text-xs text-red-300 bg-red-500/15 border border-red-500/30 rounded">
+              {gpsError}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button onClick={dropCorner} disabled={dropping}
+              className="flex-1 px-3 py-2.5 text-sm font-semibold bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-zinc-900 rounded-lg transition-colors duration-150">
+              {dropping ? 'Getting GPS…' : 'Drop Corner'}
+            </button>
+            <button onClick={finishWalk} disabled={walkVertices.length < 3}
+              className="px-3 py-2.5 text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 disabled:bg-white/[0.06] disabled:text-white/30 text-zinc-900 rounded-lg transition-colors duration-150">
+              Finish
+            </button>
+            <button onClick={cancelWalk}
+              className="px-3 py-2.5 text-sm font-medium bg-white/[0.08] hover:bg-white/[0.14] text-white/60 hover:text-white/80 border border-white/10 rounded-lg transition-all duration-150">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* New paddock form */}
       {showNewForm && (
