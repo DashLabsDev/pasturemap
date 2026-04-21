@@ -299,6 +299,14 @@ export default function MapView() {
     });
     map.addControl(geolocate, 'bottom-left');
 
+    geolocate.on('error', (e: GeolocationPositionError) => {
+      const msg = e?.code === 1 ? 'Location permission denied — enable it in Settings › Safari › Location'
+        : e?.code === 2 ? 'GPS unavailable — no signal'
+        : e?.code === 3 ? 'GPS timed out — try again with a clear sky view'
+        : (e?.message || 'GPS error');
+      setGpsError(msg);
+    });
+    geolocate.on('geolocate', () => { setGpsError(null); });
 
     drawRef.current = draw;
     mapRef.current = map;
@@ -598,9 +606,26 @@ export default function MapView() {
         </button>
       </div>
 
-      {/* Walk Mode entry button — bottom-right, above Mapbox draw/nav controls */}
+      {/* GPS error toast — surfaces geolocate permission/timeout failures */}
+      {gpsError && !walkVertices && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1500] w-[min(92vw,22rem)]">
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-red-500/15 backdrop-blur-md border border-red-500/40 rounded-lg shadow-xl">
+            <svg className="w-4 h-4 text-red-300 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <div className="flex-1 text-xs text-red-200 leading-snug">{gpsError}</div>
+            <button onClick={() => setGpsError(null)} className="text-red-300/60 hover:text-red-300 flex-shrink-0" aria-label="Dismiss">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Walk Mode entry button — bottom-right, mirrors home button height so iOS URL bar can't cover it */}
       {!walkVertices && !showNewForm && (
-        <div className="absolute bottom-4 right-2.5 z-[1000]">
+        <div className="absolute bottom-20 right-2.5 z-[1000]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <button onClick={startWalkMode}
             title="Walk the pasture and drop a pin at each corner"
             className="px-3 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg shadow-xl flex items-center gap-2 transition-colors duration-150">
