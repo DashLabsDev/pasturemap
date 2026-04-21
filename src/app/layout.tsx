@@ -14,7 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body className={`${inter.variable} bg-[#0e0f0f] text-white antialiased`}>
-        <div className="flex h-screen overflow-hidden">
+        <div className="flex h-dvh overflow-hidden">
           <Sidebar />
           <main className="flex-1 overflow-auto bg-[#0e0f0f]">{children}</main>
         </div>

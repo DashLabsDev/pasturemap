@@ -17,6 +17,12 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Keep Mapbox bottom-docked controls above iOS's dynamic URL bar */
+.mapboxgl-ctrl-bottom-left,
+.mapboxgl-ctrl-bottom-right {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 /* Leaflet overrides */
 .leaflet-container {
   width: 100%;
