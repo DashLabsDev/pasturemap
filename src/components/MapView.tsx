@@ -20,6 +20,27 @@ const DEFAULT_CENTER: [number, number] = [-92.3938, 36.9228];
 const DEFAULT_ZOOM = 14;
 const VIEW_KEY = 'pasturemap:view';
 const HOME_KEY = 'pasturemap:home';
+const STYLE_KEY = 'pasturemap:style';
+
+type MapStyleKey = 'satellite' | 'streets' | 'outdoors';
+const MAP_STYLES: Record<MapStyleKey, { label: string; url: string }> = {
+  satellite: { label: 'Satellite', url: 'mapbox://styles/mapbox/satellite-streets-v12' },
+  streets:   { label: 'Streets',   url: 'mapbox://styles/mapbox/streets-v12' },
+  outdoors:  { label: 'Outdoors',  url: 'mapbox://styles/mapbox/outdoors-v12' },
+};
+
+function loadMapStyle(): MapStyleKey {
+  if (typeof window === 'undefined') return 'satellite';
+  try {
+    const raw = localStorage.getItem(STYLE_KEY);
+    if (raw === 'satellite' || raw === 'streets' || raw === 'outdoors') return raw;
+  } catch { /* ignore */ }
+  return 'satellite';
+}
+
+function saveMapStyle(s: MapStyleKey) {
+  try { localStorage.setItem(STYLE_KEY, s); } catch { /* ignore */ }
+}
 
 function loadSavedView(): { center: [number, number]; zoom: number } {
   if (typeof window === 'undefined') return { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
@@ -286,10 +307,23 @@ export default function MapView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ id: string; place_name: string; center: [number, number] }>>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const [mapStyle, setMapStyleState] = useState<MapStyleKey>('satellite');
+  const [stylePickerOpen, setStylePickerOpen] = useState(false);
 
   const paddocksRef = useRef<Paddock[]>([]);
   paddocksRef.current = paddocks;
+  const herdsRef = useRef<Herd[]>([]);
+  herdsRef.current = herds;
+  const sessionsRef = useRef<GrazingSession[]>([]);
+  sessionsRef.current = sessions;
+  const walkVerticesRef = useRef<[number, number][] | null>(null);
+  walkVerticesRef.current = walkVertices;
+  const userPinsRef = useRef<Array<{ id: string; lng: number; lat: number }>>([]);
+  userPinsRef.current = userPins;
 
   const fetchData = useCallback(async () => {
     const [pRes, hRes, sRes] = await Promise.all([
@@ -308,10 +342,12 @@ export default function MapView() {
     if (!mapContainer.current || mapRef.current) return;
 
     const { center, zoom } = loadSavedView();
+    const initialStyle = loadMapStyle();
+    setMapStyleState(initialStyle);
 
     const map = new mapboxgl.Map({
       container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/satellite-streets-v12',
+      style: MAP_STYLES[initialStyle].url,
       center,
       zoom,
     });
@@ -353,7 +389,8 @@ export default function MapView() {
       saveView([c.lng, c.lat], map.getZoom());
     });
 
-    map.on('load', () => {
+    const installStyleLayers = () => {
+      if (map.getSource('paddocks')) return; // layers still present after this style load
       map.addSource('paddocks', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'paddocks-fill', type: 'fill', source: 'paddocks',
         paint: { 'fill-color': ['match', ['get', 'active'], 'yes', '#22c55e', '#6b7280'], 'fill-opacity': 0.25 } });
@@ -394,7 +431,38 @@ export default function MapView() {
           'text-size': 11, 'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
           'text-offset': [0, 1.5], 'text-allow-overlap': true },
         paint: { 'text-color': '#fbbf24', 'text-halo-color': '#000000', 'text-halo-width': 1 } });
-    });
+
+      // Re-apply current state data (style.load wipes sources, this repopulates them)
+      (map.getSource('paddocks') as mapboxgl.GeoJSONSource).setData(
+        buildPaddockFeatureCollection(paddocksRef.current, sessionsRef.current)
+      );
+      (map.getSource('paddock-labels') as mapboxgl.GeoJSONSource).setData(
+        buildLabelPoints(paddocksRef.current)
+      );
+      (map.getSource('herds') as mapboxgl.GeoJSONSource).setData(
+        buildHerdPoints(herdsRef.current, paddocksRef.current)
+      );
+      const wv = walkVerticesRef.current;
+      if (wv && wv.length > 0) {
+        const features: GeoJSON.Feature[] = wv.map((c, i) => ({
+          type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: { index: i },
+        }));
+        if (wv.length >= 2) features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: wv }, properties: {} });
+        if (wv.length >= 3) features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[...wv, wv[0]]] }, properties: {} });
+        (map.getSource('walk-progress') as mapboxgl.GeoJSONSource).setData({ type: 'FeatureCollection', features });
+      }
+      const pins = userPinsRef.current;
+      if (pins.length > 0) {
+        (map.getSource('user-pins') as mapboxgl.GeoJSONSource).setData({
+          type: 'FeatureCollection',
+          features: pins.map((p) => ({
+            type: 'Feature', geometry: { type: 'Point', coordinates: [p.lng, p.lat] }, properties: { id: p.id },
+          })),
+        });
+      }
+    };
+
+    map.on('style.load', installStyleLayers);
 
     map.on('click', 'paddocks-fill', (e) => {
       if (!e.features || e.features.length === 0) return;
@@ -442,7 +510,7 @@ export default function MapView() {
       (map.getSource('herds') as mapboxgl.GeoJSONSource | undefined)
         ?.setData(buildHerdPoints(herds, paddocks));
     };
-    if (map.isStyleLoaded()) update(); else map.once('load', update);
+    if (map.isStyleLoaded()) update(); else map.once('style.load', update);
   }, [paddocks, herds, sessions]);
 
   const saveNewPaddock = async () => {
@@ -571,6 +639,13 @@ export default function MapView() {
 
   const clearUserPins = () => setUserPins([]);
 
+  const changeMapStyle = (key: MapStyleKey) => {
+    setMapStyleState(key);
+    saveMapStyle(key);
+    setStylePickerOpen(false);
+    mapRef.current?.setStyle(MAP_STYLES[key].url);
+  };
+
   const dropCorner = () => {
     if (dropping) return;
     setDropping(true);
@@ -660,36 +735,68 @@ export default function MapView() {
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* Address search bar — clear hamburger (left) and draw/zoom stack (right); respect landscape notch */}
+      {/* Search — collapsed magnifying-glass FAB, expands on tap. Respects landscape notch. */}
       <div
         className="absolute top-4 z-[1000]"
-        style={{
-          left: 'calc(3.5rem + env(safe-area-inset-left))',
-          right: 'calc(4rem + env(safe-area-inset-right))',
-          maxWidth: '18rem',
-        }}
+        style={{ left: 'calc(0.625rem + env(safe-area-inset-left))' }}
       >
-        <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none"
-            fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" strokeLinecap="round" />
-          </svg>
-          <input type="text" placeholder="Search address or place..."
-            value={searchQuery}
-            onChange={(e) => handleSearchInput(e.target.value)}
-            onFocus={() => searchResults.length > 0 && setShowSearchResults(true)}
-            className="w-full pl-9 pr-3 py-2.5 text-sm bg-black/60 backdrop-blur-md text-white placeholder-white/40 border border-white/10 rounded-lg shadow-2xl focus:outline-none focus:border-white/25 focus:bg-black/70 transition-all duration-150"
-          />
-        </div>
-        {showSearchResults && searchResults.length > 0 && (
-          <ul className="mt-1 bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-2xl overflow-hidden">
-            {searchResults.map((r) => (
-              <li key={r.id} onClick={() => flyToResult(r)}
-                className="px-3 py-2.5 text-sm text-white/80 hover:text-white hover:bg-white/[0.08] cursor-pointer border-b border-white/5 last:border-0 truncate transition-colors duration-100">
-                {r.place_name}
-              </li>
-            ))}
-          </ul>
+        {!searchExpanded ? (
+          <button
+            onClick={() => {
+              setSearchExpanded(true);
+              setTimeout(() => searchInputRef.current?.focus(), 30);
+            }}
+            aria-label="Search"
+            title="Search"
+            className="w-[30px] h-[30px] flex items-center justify-center bg-white hover:bg-gray-100 text-gray-700 rounded shadow transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+            </svg>
+          </button>
+        ) : (
+          <div
+            style={{
+              width: 'min(calc(100vw - 5.25rem - env(safe-area-inset-left) - env(safe-area-inset-right)), 22rem)',
+            }}
+          >
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none"
+                fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+              </svg>
+              <input ref={searchInputRef} type="text" placeholder="Search address or place..."
+                value={searchQuery}
+                onChange={(e) => handleSearchInput(e.target.value)}
+                onFocus={() => searchResults.length > 0 && setShowSearchResults(true)}
+                className="w-full pl-9 pr-9 py-2.5 text-sm bg-black/60 backdrop-blur-md text-white placeholder-white/40 border border-white/10 rounded-lg shadow-2xl focus:outline-none focus:border-white/25 focus:bg-black/70 transition-all duration-150"
+              />
+              <button
+                onClick={() => {
+                  setSearchExpanded(false);
+                  setSearchQuery('');
+                  setSearchResults([]);
+                  setShowSearchResults(false);
+                }}
+                aria-label="Close search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-white/50 hover:text-white/90 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            {showSearchResults && searchResults.length > 0 && (
+              <ul className="mt-1 bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-2xl overflow-hidden">
+                {searchResults.map((r) => (
+                  <li key={r.id} onClick={() => flyToResult(r)}
+                    className="px-3 py-2.5 text-sm text-white/80 hover:text-white hover:bg-white/[0.08] cursor-pointer border-b border-white/5 last:border-0 truncate transition-colors duration-100">
+                    {r.place_name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </div>
 
@@ -738,12 +845,22 @@ export default function MapView() {
         </div>
       )}
 
-      {/* Tools entry button — bottom-right, mirrors home button height; respect landscape notch */}
+      {/* Right-edge button stack: map style toggle (top) + tools (bottom). Respects landscape notch. */}
       {!walkVertices && !showNewForm && !measuring && (
         <div
-          className="absolute bottom-20 z-[1000]"
+          className="absolute bottom-20 z-[1000] flex flex-col gap-2"
           style={{ right: 'calc(0.625rem + env(safe-area-inset-right))' }}
         >
+          <button onClick={() => setStylePickerOpen(true)}
+            title={`Map style: ${MAP_STYLES[mapStyle].label}`}
+            aria-label="Change map style"
+            className="w-[30px] h-[30px] flex items-center justify-center bg-white hover:bg-gray-100 text-gray-700 rounded shadow transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <polygon points="12,2 22,8 12,14 2,8" strokeLinejoin="round" />
+              <polyline points="2,12 12,18 22,12" strokeLinejoin="round" strokeLinecap="round" />
+              <polyline points="2,16 12,22 22,16" strokeLinejoin="round" strokeLinecap="round" />
+            </svg>
+          </button>
           <button onClick={() => setToolsOpen(true)}
             title="Tools"
             aria-label="Open tools"
@@ -753,6 +870,50 @@ export default function MapView() {
             </svg>
           </button>
         </div>
+      )}
+
+      {/* Map style picker sheet */}
+      {stylePickerOpen && (
+        <>
+          <div className="fixed inset-0 z-[1900] bg-black/50 backdrop-blur-sm" onClick={() => setStylePickerOpen(false)} />
+          <div
+            className="fixed bottom-0 left-0 right-0 z-[2000] bg-zinc-900/98 backdrop-blur-md border-t border-white/10 rounded-t-2xl shadow-2xl"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-10 h-1 rounded-full bg-white/20" />
+            </div>
+            <div className="flex items-center justify-between px-5 pt-2 pb-4">
+              <h2 className="text-lg font-semibold text-white">Map Style</h2>
+              <button onClick={() => setStylePickerOpen(false)}
+                className="text-white/30 hover:text-white/60 transition-colors" aria-label="Close">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+            <div className="px-5 pb-6 flex flex-col gap-2">
+              {(Object.keys(MAP_STYLES) as MapStyleKey[]).map((key) => {
+                const isActive = mapStyle === key;
+                return (
+                  <button key={key} onClick={() => changeMapStyle(key)}
+                    className={`flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-amber-500/20 text-amber-200 border border-amber-400/40'
+                        : 'bg-white/[0.06] hover:bg-white/[0.10] text-white/80 border border-white/10'
+                    }`}>
+                    <span>{MAP_STYLES[key].label}</span>
+                    {isActive && (
+                      <svg className="w-4 h-4 text-amber-300" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                        <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Measure in-progress banner */}
