@@ -555,12 +555,13 @@ export default function MapView() {
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* Address search bar — on mobile push right to clear hamburger; respect landscape notch */}
+      {/* Address search bar — clear hamburger (left) and draw/zoom stack (right); respect landscape notch */}
       <div
-        className="absolute top-4 z-[1000] md:w-72"
+        className="absolute top-4 z-[1000]"
         style={{
           left: 'calc(3.5rem + env(safe-area-inset-left))',
-          right: 'calc(1rem + env(safe-area-inset-right))',
+          right: 'calc(4rem + env(safe-area-inset-right))',
+          maxWidth: '18rem',
         }}
       >
         <div className="relative">
