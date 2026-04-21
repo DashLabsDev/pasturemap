@@ -57,6 +57,36 @@ function saveHomeLocation(center: [number, number], zoom: number) {
   try { localStorage.setItem(HOME_KEY, JSON.stringify({ center, zoom })); } catch { /* ignore */ }
 }
 
+// Haversine distance between two lng/lat points in meters
+function haversineMeters(a: [number, number], b: [number, number]): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLng = toRad(b[0] - a[0]);
+  const s1 = Math.sin(dLat / 2);
+  const s2 = Math.sin(dLng / 2);
+  const h = s1 * s1 + Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * s2 * s2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function haversineLineLength(coords: [number, number][]): number {
+  let sum = 0;
+  for (let i = 1; i < coords.length; i++) sum += haversineMeters(coords[i - 1], coords[i]);
+  return sum;
+}
+
+function ToolTile({ label, onClick, icon }: { label: string; onClick: () => void; icon: React.ReactNode }) {
+  return (
+    <button onClick={onClick}
+      className="flex flex-col items-center gap-1.5 py-2 group">
+      <span className="w-12 h-12 flex items-center justify-center rounded-full bg-white/[0.08] group-hover:bg-white/[0.14] border border-white/10 text-white/85 transition-colors [&>svg]:w-6 [&>svg]:h-6">
+        {icon}
+      </span>
+      <span className="text-[11px] leading-tight text-center text-white/75 group-hover:text-white">{label}</span>
+    </button>
+  );
+}
+
 function buildPaddockFeatureCollection(
   paddocks: Paddock[],
   activeSessions: GrazingSession[]
@@ -248,6 +278,11 @@ export default function MapView() {
   const [dropping, setDropping] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
 
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [userPins, setUserPins] = useState<Array<{ id: string; lng: number; lat: number }>>([]);
+  const [measureResult, setMeasureResult] = useState<string | null>(null);
+  const [measuring, setMeasuring] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ id: string; place_name: string; center: [number, number] }>>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -281,14 +316,15 @@ export default function MapView() {
       zoom,
     });
 
+    // Draw instance kept hidden; we trigger modes from the Tools tray
     const draw = new MapboxDraw({
       displayControlsDefault: false,
-      controls: { polygon: true, trash: true },
+      controls: {},
       defaultMode: 'simple_select',
     });
 
     map.addControl(draw, 'top-right');
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
 
     // Built-in GPS control — blue dot, accuracy circle, handles platform quirks
     const geolocate = new mapboxgl.GeolocateControl({
@@ -343,6 +379,12 @@ export default function MapView() {
         paint: { 'circle-radius': 6, 'circle-color': '#f59e0b',
           'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff' } });
 
+      // User-dropped pins (session-only, not persisted)
+      map.addSource('user-pins', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'user-pins-circle', type: 'circle', source: 'user-pins',
+        paint: { 'circle-radius': 7, 'circle-color': '#ef4444',
+          'circle-stroke-width': 2.5, 'circle-stroke-color': '#ffffff' } });
+
       map.addSource('herds', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'herds-circle', type: 'circle', source: 'herds',
         paint: { 'circle-radius': 8, 'circle-color': '#f59e0b',
@@ -365,14 +407,22 @@ export default function MapView() {
     map.on('mouseleave', 'paddocks-fill', () => { map.getCanvas().style.cursor = ''; });
 
     map.on('draw.create', (e: { features: GeoJSON.Feature[] }) => {
-      if (e.features.length > 0) {
-        const geo = e.features[0].geometry;
+      if (e.features.length === 0) return;
+      const geo = e.features[0].geometry;
+      if (geo.type === 'Polygon') {
+        const acres = turfArea({ type: 'Feature', geometry: geo, properties: {} }) / 4046.8564224;
         setNewBoundary(geo);
-        if (geo.type === 'Polygon') {
-          const acres = turfArea({ type: 'Feature', geometry: geo, properties: {} }) / 4046.8564224;
-          setNewAcreage(acres.toFixed(2));
-        }
+        setNewAcreage(acres.toFixed(2));
         setShowNewForm(true);
+        drawRef.current?.deleteAll();
+      } else if (geo.type === 'LineString') {
+        const meters = haversineLineLength(geo.coordinates as [number, number][]);
+        const feet = meters * 3.28084;
+        const label = feet < 1000
+          ? `${feet.toFixed(0)} ft`
+          : `${(feet / 5280).toFixed(2)} mi (${feet.toFixed(0)} ft)`;
+        setMeasureResult(label);
+        setMeasuring(false);
         drawRef.current?.deleteAll();
       }
     });
@@ -461,10 +511,65 @@ export default function MapView() {
     src.setData({ type: 'FeatureCollection', features });
   }, [walkVertices]);
 
+  // Sync dropped user pins to the map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource('user-pins') as mapboxgl.GeoJSONSource | undefined;
+    if (!src) return;
+    src.setData({
+      type: 'FeatureCollection',
+      features: userPins.map((p) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+        properties: { id: p.id },
+      })),
+    });
+  }, [userPins]);
+
   const startWalkMode = () => {
+    setToolsOpen(false);
     setWalkVertices([]);
     setGpsError(null);
   };
+
+  const startDrawArea = () => {
+    setToolsOpen(false);
+    drawRef.current?.changeMode('draw_polygon');
+  };
+
+  const startMeasure = () => {
+    setToolsOpen(false);
+    setMeasureResult(null);
+    setMeasuring(true);
+    drawRef.current?.changeMode('draw_line_string');
+  };
+
+  const cancelMeasure = () => {
+    setMeasuring(false);
+    drawRef.current?.deleteAll();
+    drawRef.current?.changeMode('simple_select');
+  };
+
+  const dropPinAtGps = () => {
+    setToolsOpen(false);
+    setDropping(true);
+    setGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserPins((prev) => [
+          ...prev,
+          { id: String(Date.now()), lng: pos.coords.longitude, lat: pos.coords.latitude },
+        ]);
+        mapRef.current?.easeTo({ center: [pos.coords.longitude, pos.coords.latitude], duration: 400 });
+        setDropping(false);
+      },
+      (err) => { setGpsError(err.message || 'GPS unavailable'); setDropping(false); },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  const clearUserPins = () => setUserPins([]);
 
   const dropCorner = () => {
     if (dropping) return;
@@ -633,21 +738,103 @@ export default function MapView() {
         </div>
       )}
 
-      {/* Walk Mode entry button — bottom-right, mirrors home button height; respect landscape notch */}
-      {!walkVertices && !showNewForm && (
+      {/* Tools entry button — bottom-right, mirrors home button height; respect landscape notch */}
+      {!walkVertices && !showNewForm && !measuring && (
         <div
           className="absolute bottom-20 z-[1000]"
           style={{ right: 'calc(0.625rem + env(safe-area-inset-right))' }}
         >
-          <button onClick={startWalkMode}
-            title="Walk the pasture and drop a pin at each corner"
-            aria-label="Walk paddock"
+          <button onClick={() => setToolsOpen(true)}
+            title="Tools"
+            aria-label="Open tools"
             className="w-[30px] h-[30px] flex items-center justify-center bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded shadow transition-colors duration-150">
-            <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7"/>
+            <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              <path d="M14.7 6.3a4 4 0 11-5 5L4 17v3h3l5.7-5.7a4 4 0 01-.3-5z" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
         </div>
+      )}
+
+      {/* Measure in-progress banner */}
+      {measuring && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1500] w-[min(92vw,22rem)]">
+          <div className="flex items-center gap-3 px-3 py-2.5 bg-zinc-900/95 backdrop-blur-md border border-amber-400/30 rounded-lg shadow-xl">
+            <div className="flex-1 text-xs text-white/80 leading-snug">Tap two points on the map to measure.</div>
+            <button onClick={cancelMeasure}
+              className="px-2 py-1 text-xs font-medium text-white/60 hover:text-white/90 bg-white/[0.08] hover:bg-white/[0.14] rounded">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Measure result toast */}
+      {measureResult && !measuring && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1500] w-[min(92vw,22rem)]">
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-500/15 backdrop-blur-md border border-amber-400/40 rounded-lg shadow-xl">
+            <svg className="w-4 h-4 text-amber-300 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path d="M3 12h18M7 8v8M11 6v12M15 8v8M19 10v4" strokeLinecap="round"/>
+            </svg>
+            <div className="flex-1 text-sm font-semibold text-amber-100">{measureResult}</div>
+            <button onClick={() => setMeasureResult(null)} className="text-amber-200/60 hover:text-amber-100 flex-shrink-0" aria-label="Dismiss">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tools bottom sheet */}
+      {toolsOpen && (
+        <>
+          <div className="fixed inset-0 z-[1900] bg-black/50 backdrop-blur-sm" onClick={() => setToolsOpen(false)} />
+          <div
+            className="fixed bottom-0 left-0 right-0 z-[2000] bg-zinc-900/98 backdrop-blur-md border-t border-white/10 rounded-t-2xl shadow-2xl"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-10 h-1 rounded-full bg-white/20" />
+            </div>
+            <div className="flex items-center justify-between px-5 pt-2 pb-4">
+              <h2 className="text-lg font-semibold text-white">Tools</h2>
+              <button onClick={() => setToolsOpen(false)}
+                className="text-white/30 hover:text-white/60 transition-colors" aria-label="Close">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-3 px-5 pb-6">
+              <ToolTile label="Walk Paddock" onClick={startWalkMode} icon={
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7"/></svg>
+              } />
+              <ToolTile label="Draw Area" onClick={startDrawArea} icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round">
+                  <path d="M4 5l8-3 8 5-4 13-10-2z"/><circle cx="4" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="2" r="1.5" fill="currentColor" stroke="none"/><circle cx="20" cy="7" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="20" r="1.5" fill="currentColor" stroke="none"/><circle cx="6" cy="18" r="1.5" fill="currentColor" stroke="none"/>
+                </svg>
+              } />
+              <ToolTile label="Drop Pin" onClick={dropPinAtGps} icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="currentColor" stroke="none"/>
+                </svg>
+              } />
+              <ToolTile label="Measure" onClick={startMeasure} icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 12h18M7 8v8M11 6v12M15 8v8M19 10v4"/>
+                </svg>
+              } />
+            </div>
+            {userPins.length > 0 && (
+              <div className="px-5 pb-5 -mt-2">
+                <button onClick={clearUserPins}
+                  className="w-full px-3 py-2 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.10] text-white/60 hover:text-white/80 border border-white/10 rounded-lg transition-all">
+                  Clear {userPins.length} dropped pin{userPins.length === 1 ? '' : 's'}
+                </button>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Walk Mode control panel — bottom-center, visible while walking */}
