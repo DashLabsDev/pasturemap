@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRanch } from '@/components/auth/RanchProvider';
 import type { Paddock, Herd, GrazingSession } from '@/lib/types';
 
 const fenceTypes = ['permanent', 'electric', 'temporary', 'none'] as const;
 const waterSources = ['pond', 'tank', 'creek', 'well', 'trough', 'none'] as const;
 
 export default function PaddocksPage() {
+  const { activeRanch } = useRanch();
   const [paddocks, setPaddocks] = useState<Paddock[]>([]);
   const [herds, setHerds] = useState<Herd[]>([]);
   const [sessions, setSessions] = useState<GrazingSession[]>([]);
@@ -82,7 +84,11 @@ export default function PaddocksPage() {
     if (editing) {
       await supabase.from('paddocks').update(data).eq('id', editing.id);
     } else {
-      await supabase.from('paddocks').insert(data);
+      if (!activeRanch) return;
+      await supabase.from('paddocks').insert({
+        ...data,
+        ranch_id: activeRanch.ranchId,
+      });
     }
     setEditing(null);
     setShowAdd(false);

@@ -1,10 +1,14 @@
 import { cache } from 'react';
+import { cookies } from 'next/headers';
 import { createClient } from './server';
+import type { RanchAccess } from '@/components/auth/RanchProvider';
 
-export type RanchAccess = {
-  ranchId: string;
-  ranchName: string;
-  role: 'owner' | 'member';
+export const ACTIVE_RANCH_COOKIE = 'active_ranch_id';
+
+export type ActiveRanchState = {
+  activeRanch: RanchAccess | null;
+  cookieRanchId: string | null;
+  shouldPersistCookie: boolean;
 };
 
 export const getAccessibleRanches = cache(async (): Promise<RanchAccess[]> => {
@@ -39,7 +43,24 @@ export const getAccessibleRanches = cache(async (): Promise<RanchAccess[]> => {
   return Array.from(byId.values()).sort((a, b) => a.ranchName.localeCompare(b.ranchName));
 });
 
-export const getActiveRanch = cache(async (): Promise<RanchAccess | null> => {
+export const getActiveRanch = cache(async (): Promise<ActiveRanchState> => {
   const ranches = await getAccessibleRanches();
-  return ranches[0] ?? null;
+  const cookieStore = await cookies();
+  const cookieRanchId = cookieStore.get(ACTIVE_RANCH_COOKIE)?.value ?? null;
+
+  if (ranches.length === 0) {
+    return {
+      activeRanch: null,
+      cookieRanchId,
+      shouldPersistCookie: cookieRanchId !== null,
+    };
+  }
+
+  const activeRanch = ranches.find((ranch) => ranch.ranchId === cookieRanchId) ?? ranches[0];
+
+  return {
+    activeRanch,
+    cookieRanchId,
+    shouldPersistCookie: cookieRanchId !== activeRanch.ranchId,
+  };
 });
