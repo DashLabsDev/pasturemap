@@ -13,7 +13,7 @@ as $$
 $$;
 
 revoke all on function public.user_has_ranch_access(uuid) from public;
-grant execute on function public.user_has_ranch_access(uuid) to authenticated;
+grant execute on function public.user_has_ranch_access(uuid) to authenticated, anon;
 
 alter table public.ranches enable row level security;
 alter table public.paddocks enable row level security;
