@@ -41,7 +41,10 @@ export default function ActivityPage() {
     if (hRes.data) setHerds(hRes.data as Herd[]);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+    void fetchData();
+  }, []);
 
   const filtered = filterHerd
     ? events.filter((e) => e.herd_id === filterHerd)

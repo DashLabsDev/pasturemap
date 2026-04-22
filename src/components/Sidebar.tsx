@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Map, Layers, Users, RotateCw, Activity } from 'lucide-react';
+import { useRanch } from '@/components/auth/RanchProvider';
 
 const navItems = [
   { href: '/',         label: 'Map',      Icon: Map },
@@ -14,6 +15,7 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { activeRanch } = useRanch();
 
   return (
     <aside className="hidden md:flex z-[2000] h-full flex-col bg-zinc-950 border-r border-white/10 w-64 shrink-0">
@@ -46,7 +48,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-4 py-4 border-t border-white/[0.05]">
-        <p className="text-xs text-white/25 font-medium">McCormick Ranch</p>
+        <p className="text-xs text-white/25 font-medium">{activeRanch?.ranchName ?? 'No ranch access'}</p>
       </div>
     </aside>
   );

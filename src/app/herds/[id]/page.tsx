@@ -39,7 +39,10 @@ export default function HerdDetailPage() {
     if (aRes.data) setAnimals(aRes.data as Animal[]);
   }, [herdId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+    void fetchData();
+  }, []);
 
   const loadWeightHistory = async (animalId: string) => {
     const { data } = await supabase

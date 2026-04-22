@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, DEFAULT_RANCH_ID } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import type { Herd, Paddock } from '@/lib/types';
 import HerdCard from '@/components/HerdCard';
 
@@ -34,7 +34,10 @@ export default function HerdsPage() {
     if (pRes.data) setPaddocks(pRes.data as Paddock[]);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+    void fetchData();
+  }, []);
 
   const paddockName = (id: string | null) =>
     paddocks.find((p) => p.id === id)?.name;
@@ -67,7 +70,6 @@ export default function HerdsPage() {
       herd_type: form.herd_type || null,
       current_paddock_id: form.current_paddock_id || null,
       notes: form.notes || null,
-      ranch_id: DEFAULT_RANCH_ID,
     };
 
     if (editing) {

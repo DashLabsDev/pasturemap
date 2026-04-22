@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, DEFAULT_RANCH_ID } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import type { Paddock, Herd, GrazingSession } from '@/lib/types';
 
 const fenceTypes = ['permanent', 'electric', 'temporary', 'none'] as const;
@@ -36,7 +36,10 @@ export default function PaddocksPage() {
     if (sRes.data) setSessions(sRes.data as GrazingSession[]);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+    void fetchData();
+  }, []);
 
   const getStatus = (paddockId: string) => {
     const session = sessions.find((s) => s.paddock_id === paddockId);
@@ -79,7 +82,7 @@ export default function PaddocksPage() {
     if (editing) {
       await supabase.from('paddocks').update(data).eq('id', editing.id);
     } else {
-      await supabase.from('paddocks').insert({ ...data, ranch_id: DEFAULT_RANCH_ID });
+      await supabase.from('paddocks').insert(data);
     }
     setEditing(null);
     setShowAdd(false);
