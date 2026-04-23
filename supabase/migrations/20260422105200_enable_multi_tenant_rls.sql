@@ -40,10 +40,14 @@ drop policy if exists herds_all on public.herds;
 create policy herds_all on public.herds for all using (public.user_has_ranch_access(ranch_id)) with check (public.user_has_ranch_access(ranch_id));
 
 drop policy if exists grazing_sessions_all on public.grazing_sessions;
-create policy grazing_sessions_all on public.grazing_sessions for all using (public.user_has_ranch_access(ranch_id)) with check (public.user_has_ranch_access(ranch_id));
+create policy grazing_sessions_all on public.grazing_sessions for all
+  using (public.user_has_ranch_access((select ranch_id from public.herds where id = grazing_sessions.herd_id)))
+  with check (public.user_has_ranch_access((select ranch_id from public.herds where id = grazing_sessions.herd_id)));
 
 drop policy if exists move_events_all on public.move_events;
-create policy move_events_all on public.move_events for all using (public.user_has_ranch_access(ranch_id)) with check (public.user_has_ranch_access(ranch_id));
+create policy move_events_all on public.move_events for all
+  using (public.user_has_ranch_access((select ranch_id from public.herds where id = move_events.herd_id)))
+  with check (public.user_has_ranch_access((select ranch_id from public.herds where id = move_events.herd_id)));
 
 drop policy if exists animals_all on public.animals;
 create policy animals_all on public.animals for all
