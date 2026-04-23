@@ -96,8 +96,16 @@ export default function PaddocksPage() {
   };
 
   const deletePaddock = async (id: string) => {
+    if (sessions.some((s) => s.paddock_id === id)) {
+      alert('This paddock has an active grazing session. Move the herd off first.');
+      return;
+    }
     if (!confirm('Delete this paddock?')) return;
-    await supabase.from('paddocks').delete().eq('id', id);
+    const { error } = await supabase.from('paddocks').delete().eq('id', id);
+    if (error) {
+      alert(`Could not delete paddock: ${error.message}`);
+      return;
+    }
     setSelected((prev) => { const next = new Set(prev); next.delete(id); return next; });
     fetchData();
   };
@@ -120,11 +128,23 @@ export default function PaddocksPage() {
 
   const bulkDelete = async () => {
     if (selected.size === 0) return;
+    const blocked = sessions.filter((s) => s.paddock_id && selected.has(s.paddock_id));
+    if (blocked.length > 0) {
+      const names = blocked
+        .map((s) => paddocks.find((p) => p.id === s.paddock_id)?.name ?? 'a paddock')
+        .join(', ');
+      alert(`Cannot delete: ${blocked.length} paddock(s) have active grazing (${names}). Move herds off first.`);
+      return;
+    }
     if (!confirm(`Delete ${selected.size} paddock${selected.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
     setBulkDeleting(true);
-    await supabase.from('paddocks').delete().in('id', Array.from(selected));
-    setSelected(new Set());
+    const { error } = await supabase.from('paddocks').delete().in('id', Array.from(selected));
     setBulkDeleting(false);
+    if (error) {
+      alert(`Could not delete paddocks: ${error.message}`);
+      return;
+    }
+    setSelected(new Set());
     fetchData();
   };
 
