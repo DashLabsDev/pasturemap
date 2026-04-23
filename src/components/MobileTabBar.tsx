@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Map, Layers, Users, RotateCw, Activity } from 'lucide-react';
+import { useRanch } from '@/components/auth/RanchProvider';
 
 const tabs = [
   { href: '/',         label: 'Map',      Icon: Map },
@@ -14,12 +15,15 @@ const tabs = [
 
 export default function MobileTabBar() {
   const pathname = usePathname();
+  const { activeRanch } = useRanch();
 
   return (
-    <nav
-      className="md:hidden shrink-0 bg-zinc-950/95 backdrop-blur border-t border-white/10 flex"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-    >
+    <div className="md:hidden shrink-0 border-t border-white/10 bg-zinc-950/95 backdrop-blur">
+      <div className="px-4 pt-2 text-[10px] font-medium uppercase tracking-[0.18em] text-white/30">{activeRanch?.ranchName ?? 'No ranch access'}</div>
+      <nav
+        className="flex"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
       {tabs.map(({ href, label, Icon }) => {
         const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
         return (
@@ -35,6 +39,7 @@ export default function MobileTabBar() {
           </Link>
         );
       })}
-    </nav>
+      </nav>
+    </div>
   );
 }

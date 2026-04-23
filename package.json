@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@mapbox/mapbox-gl-draw": "^1.5.1",
+    "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
     "@turf/area": "^7.3.4",
     "@turf/bbox": "^7.3.4",

@@ -9,7 +9,8 @@ import turfArea from '@turf/area';
 import turfBbox from '@turf/bbox';
 import turfIntersect from '@turf/intersect';
 import { featureCollection, feature, polygon as turfPolygon } from '@turf/helpers';
-import { supabase, DEFAULT_RANCH_ID } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { useRanch } from '@/components/auth/RanchProvider';
 import type { Paddock, Herd, GrazingSession } from '@/lib/types';
 import PaddockPanel from './PaddockPanel';
 import SplitPaddockModal from './SplitPaddockModal';
@@ -277,6 +278,7 @@ function splitPolygonIntoStrips(boundary: GeoJSON.Polygon, count: number): GeoJS
 }
 
 export default function MapView() {
+  const { activeRanch } = useRanch();
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
@@ -315,15 +317,30 @@ export default function MapView() {
   const [stylePickerOpen, setStylePickerOpen] = useState(false);
 
   const paddocksRef = useRef<Paddock[]>([]);
-  paddocksRef.current = paddocks;
   const herdsRef = useRef<Herd[]>([]);
-  herdsRef.current = herds;
   const sessionsRef = useRef<GrazingSession[]>([]);
-  sessionsRef.current = sessions;
   const walkVerticesRef = useRef<[number, number][] | null>(null);
-  walkVerticesRef.current = walkVertices;
   const userPinsRef = useRef<Array<{ id: string; lng: number; lat: number }>>([]);
-  userPinsRef.current = userPins;
+
+  useEffect(() => {
+    paddocksRef.current = paddocks;
+  }, [paddocks]);
+
+  useEffect(() => {
+    herdsRef.current = herds;
+  }, [herds]);
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+
+  useEffect(() => {
+    walkVerticesRef.current = walkVertices;
+  }, [walkVertices]);
+
+  useEffect(() => {
+    userPinsRef.current = userPins;
+  }, [userPins]);
 
   const fetchData = useCallback(async () => {
     const [pRes, hRes, sRes] = await Promise.all([
@@ -336,7 +353,10 @@ export default function MapView() {
     if (sRes.data) setSessions(sRes.data as GrazingSession[]);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchData();
+  }, []);
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
@@ -496,7 +516,6 @@ export default function MapView() {
     });
 
     return () => { map.remove(); mapRef.current = null; drawRef.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -516,7 +535,7 @@ export default function MapView() {
   const saveNewPaddock = async () => {
     if (!newName.trim() || !newBoundary) return;
     await supabase.rpc('upsert_paddock', {
-      p_ranch_id: DEFAULT_RANCH_ID,
+      p_ranch_id: activeRanch?.ranchId,
       p_name: newName.trim(),
       p_acreage: newAcreage ? parseFloat(newAcreage) : null,
       p_boundary_geojson: newBoundary,
@@ -535,7 +554,7 @@ export default function MapView() {
     for (let i = 0; i < strips.length; i++) {
       // Let PostGIS compute acreage server-side using EPSG:5070 equal-area projection
       await supabase.rpc('upsert_paddock', {
-        p_ranch_id: DEFAULT_RANCH_ID,
+        p_ranch_id: activeRanch?.ranchId,
         p_name: `${splitTarget.name} – ${i + 1}`,
         p_acreage: null,
         p_boundary_geojson: strips[i],

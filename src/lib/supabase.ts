@@ -1,8 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/client';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export const DEFAULT_RANCH_ID = '00000000-0000-0000-0000-000000000001';
+export const supabase = createClient();

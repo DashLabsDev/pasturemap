@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, DEFAULT_RANCH_ID } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { useRanch } from '@/components/auth/RanchProvider';
 import type { GrazingSession, Herd, Paddock } from '@/lib/types';
 import { calculateRotation } from '@/lib/grazing-calc';
 import GrazingSessionCard from '@/components/GrazingSessionCard';
@@ -19,6 +20,7 @@ export default function GrazingPage() {
   const [tab, setTab] = useState<Tab>('current');
   const [moveSession, setMoveSession] = useState<GrazingSession | null>(null);
   const [showNewSession, setShowNewSession] = useState(false);
+  const { activeRanch } = useRanch();
 
   const [newForm, setNewForm] = useState({
     herd_id: '',
@@ -41,7 +43,10 @@ export default function GrazingPage() {
     if (pRes.data) setPaddocks(pRes.data as Paddock[]);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+    void fetchData();
+  }, []);
 
   const filtered = sessions.filter((s) => {
     if (tab === 'current') return s.status === 'active';
@@ -61,6 +66,7 @@ export default function GrazingPage() {
       .eq('id', session.id);
 
     await supabase.from('move_events').insert({
+      ranch_id: activeRanch?.ranchId,
       herd_id: session.herd_id,
       from_paddock_id: session.paddock_id,
       event_type: 'suspend',
@@ -87,7 +93,10 @@ export default function GrazingPage() {
       plannedDays = Math.round(rec.maxDays);
     }
 
+    if (!activeRanch) return;
+
     await supabase.from('grazing_sessions').insert({
+      ranch_id: activeRanch.ranchId,
       herd_id: newForm.herd_id,
       paddock_id: newForm.paddock_id,
       move_in_date: newForm.move_in_date,
@@ -101,6 +110,7 @@ export default function GrazingPage() {
       .eq('id', newForm.herd_id);
 
     await supabase.from('move_events').insert({
+      ranch_id: activeRanch.ranchId,
       herd_id: newForm.herd_id,
       to_paddock_id: newForm.paddock_id,
       event_type: 'graze-start',

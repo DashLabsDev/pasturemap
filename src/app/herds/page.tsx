@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, DEFAULT_RANCH_ID } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { useRanch } from '@/components/auth/RanchProvider';
 import type { Herd, Paddock } from '@/lib/types';
 import HerdCard from '@/components/HerdCard';
 
@@ -11,6 +12,7 @@ const inputCls = 'w-full px-3 py-2 text-sm bg-white/[0.08] border border-white/1
 const labelCls = 'block text-xs text-white/40 font-medium mb-1';
 
 export default function HerdsPage() {
+  const { activeRanch } = useRanch();
   const [herds, setHerds] = useState<Herd[]>([]);
   const [paddocks, setPaddocks] = useState<Paddock[]>([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -34,7 +36,10 @@ export default function HerdsPage() {
     if (pRes.data) setPaddocks(pRes.data as Paddock[]);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+    void fetchData();
+  }, []);
 
   const paddockName = (id: string | null) =>
     paddocks.find((p) => p.id === id)?.name;
@@ -67,13 +72,16 @@ export default function HerdsPage() {
       herd_type: form.herd_type || null,
       current_paddock_id: form.current_paddock_id || null,
       notes: form.notes || null,
-      ranch_id: DEFAULT_RANCH_ID,
     };
 
     if (editing) {
       await supabase.from('herds').update(data).eq('id', editing.id);
     } else {
-      await supabase.from('herds').insert(data);
+      if (!activeRanch) return;
+      await supabase.from('herds').insert({
+        ...data,
+        ranch_id: activeRanch.ranchId,
+      });
     }
     setEditing(null);
     setShowAdd(false);

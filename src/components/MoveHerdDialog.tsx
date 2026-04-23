@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useRanch } from '@/components/auth/RanchProvider';
 import { calculateRotation } from '@/lib/grazing-calc';
 import type { Herd, Paddock, GrazingSession } from '@/lib/types';
 
@@ -19,6 +20,7 @@ const labelCls = 'block text-xs text-white/40 font-medium mb-1';
 
 export default function MoveHerdDialog({ session, herd, paddocks, onClose, onComplete }: Props) {
   const [targetPaddockId, setTargetPaddockId] = useState('');
+  const { activeRanch } = useRanch();
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -48,7 +50,10 @@ export default function MoveHerdDialog({ session, herd, paddocks, onClose, onCom
       })
       .eq('id', session.id);
 
+    if (!activeRanch) return;
+
     await supabase.from('grazing_sessions').insert({
+      ranch_id: activeRanch.ranchId,
       herd_id: herd.id,
       paddock_id: targetPaddockId,
       move_in_date: today,
@@ -62,6 +67,7 @@ export default function MoveHerdDialog({ session, herd, paddocks, onClose, onCom
       .eq('id', herd.id);
 
     await supabase.from('move_events').insert({
+      ranch_id: activeRanch.ranchId,
       herd_id: herd.id,
       from_paddock_id: session.paddock_id,
       to_paddock_id: targetPaddockId,

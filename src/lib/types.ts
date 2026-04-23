@@ -55,6 +55,7 @@ export interface Animal {
 
 export interface GrazingSession {
   id: string;
+  ranch_id: string;
   herd_id: string;
   paddock_id: string;
   move_in_date: string;
@@ -72,6 +73,7 @@ export interface GrazingSession {
 
 export interface MoveEvent {
   id: string;
+  ranch_id: string;
   herd_id: string;
   from_paddock_id: string | null;
   to_paddock_id: string | null;
