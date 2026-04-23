@@ -28,15 +28,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const cookieStore = await cookies();
 
   if (activeRanchState.shouldPersistCookie) {
-    if (activeRanchState.activeRanch) {
-      cookieStore.set(ACTIVE_RANCH_COOKIE, activeRanchState.activeRanch.ranchId, {
-        path: '/',
-        sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60 * 24 * 365,
-      });
-    } else {
-      cookieStore.delete(ACTIVE_RANCH_COOKIE);
+    try {
+      if (activeRanchState.activeRanch) {
+        cookieStore.set(ACTIVE_RANCH_COOKIE, activeRanchState.activeRanch.ranchId, {
+          path: '/',
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+          maxAge: 60 * 60 * 24 * 365,
+        });
+      } else {
+        cookieStore.delete(ACTIVE_RANCH_COOKIE);
+      }
+    } catch {
+      // Next 16 forbids cookie mutations in Server Components; persistence is
+      // best-effort here. Route Handler or middleware is the durable fix.
     }
   }
 
